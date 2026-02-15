@@ -20,11 +20,11 @@ def main():
     try:
         import fastapi
         import requests
-        import mistralai
+        import dotenv
         print("✓ All dependencies installed")
     except ImportError as e:
         print(f"✗ Missing package: {e}")
-        print("Run: pip install fastapi uvicorn requests mistralai python-dotenv")
+        print("Run: pip install fastapi uvicorn requests python-dotenv sqlite3")
         return
     
     print("\n[3/3] Setup complete!")
