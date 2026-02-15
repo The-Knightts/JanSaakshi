@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JanSaakshi - Making Urban Governance Visible</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header */
+        .header {
+            border: 2px solid #d4a574;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            color: #d4a574;
+            margin-bottom: 5px;
+        }
+
+        .header p {
+            color: #a0a0a0;
+            font-size: 14px;
+        }
+
+        /* Main Section */
+        .main-section {
+            border: 2px solid #d4a574;
+            padding: 30px;
+            margin-bottom: 30px;
+        }
+
+        .question-title {
+            font-size: 18px;
+            color: #d4a574;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        /* Search Bar */
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .search-bar input {
+            flex: 1;
+            padding: 12px 15px;
+            background-color: #2a2a2a;
+            border: 1px solid #444;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .search-bar input::placeholder {
+            color: #666;
+        }
+
+        .search-bar button {
+            padding: 12px 25px;
+            background-color: #d4a574;
+            color: #1a1a1a;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .search-bar button:hover {
+            background-color: #e0b583;
+        }
+
+        /* Area Selection */
+        .area-selection {
+            margin-bottom: 30px;
+        }
+
+        .area-selection label {
+            display: block;
+            font-size: 13px;
+            color: #a0a0a0;
+            margin-bottom: 10px;
+        }
+
+        .area-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .area-btn {
+            padding: 8px 16px;
+            background-color: transparent;
+            border: 1px solid #d4a574;
+            color: #d4a574;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .area-btn:hover {
+            background-color: #d4a574;
+            color: #1a1a1a;
+        }
+
+        /* Sections */
+        .info-section {
+            border: 2px solid #d4a574;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            color: #d4a574;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .section-icon {
+            font-size: 18px;
+        }
+
+        .project-list {
+            list-style: none;
+        }
+
+        .project-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #333;
+            color: #e0e0e0;
+            font-size: 14px;
+        }
+
+        .project-item:last-child {
+            border-bottom: none;
+        }
+
+        .see-all {
+            display: inline-block;
+            margin-top: 15px;
+            color: #d4a574;
+            cursor: pointer;
+            font-size: 13px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .see-all:hover {
+            color: #e0b583;
+        }
+
+        /* Loading and Status */
+        .loading {
+            text-align: center;
+            color: #d4a574;
+            padding: 20px;
+            display: none;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .results-section {
+            border: 2px solid #d4a574;
+            padding: 25px;
+            margin-top: 30px;
+            display: none;
+        }
+
+        .results-section.show {
+            display: block;
+        }
+
+        .ai-response {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-radius: 4px;
+            color: #e0e0e0;
+            line-height: 1.8;
+        }
+
+        .ai-response h3 {
+            color: #d4a574;
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+
+        .ai-response h4 {
+            color: #d4a574;
+            margin-top: 15px;
+        }
+
+        .ai-response p {
+            margin: 8px 0;
+        }
+
+        .ai-response strong {
+            color: #d4a574;
+        }
+
+        .error-message {
+            background-color: #4a2a2a;
+            border: 1px solid #8b4545;
+            padding: 15px;
+            color: #ff9999;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🏛️ JanSaakshi</h1>
+            <p>Making Urban Governance Visible</p>
+        </div>
+
+        <!-- Main Section -->
+        <div class="main-section">
+            <div class="question-title">What's happening in your neighborhood?</div>
+
+            <!-- Search Bar -->
+            <div class="search-bar">
+                <input type="text" id="wardInput" placeholder="Enter ward number, project type, or ask a question" />
+                <button onclick="searchWard()">Search</button>
+            </div>
+
+            <!-- Search Examples -->
+            <div style="background-color: #2a2a2a; padding: 12px; margin-bottom: 20px; border-left: 3px solid #d4a574; font-size: 13px; color: #a0a0a0;">
+                <strong style="color: #d4a574;">Try:</strong> <span style="margin-right: 15px;">37</span> <span style="margin-right: 15px;">delayed projects</span> <span style="margin-right: 15px;">road work</span> <span style="margin-right: 15px;">what's happening in my area</span>
+            </div>
+
+            <!-- Area Selection -->
+            <div class="area-selection">
+                <label>OR choose your area:</label>
+                <div class="area-buttons">
+                    <button class="area-btn" onclick="selectArea('Malad East')">Malad</button>
+                    <button class="area-btn" onclick="selectArea('Akurli')">Akurli</button>
+                    <button class="area-btn" onclick="selectArea('Delayed')">Malad West</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div class="loading" id="loading">⏳ Loading data...</div>
+
+        <!-- Delayed Projects Section -->
+        <div class="info-section" id="delayedSection">
+            <div class="section-title">
+                <span class="section-icon">⚠️</span>
+                <span>DELAYED PROJECTS ACROSS MUMBAI</span>
+            </div>
+            <ul class="project-list" id="delayedList">
+                <li class="project-item">Road repair in Ward 45 - 200 days overdue</li>
+                <li class="project-item">School renovation in Ward 78 - 150 days overdue</li>
+                <li class="project-item">Park development in Ward 12 - 90 days overdue</li>
+            </ul>
+            <a class="see-all" onclick="viewAllDelayed()">→ See All Delayed Projects</a>
+        </div>
+
+        <!-- Recent Approvals Section -->
+        <div class="info-section" id="approvalsSection">
+            <div class="section-title">
+                <span class="section-icon">📋</span>
+                <span>RECENT APPROVALS</span>
+            </div>
+            <ul class="project-list" id="approvalsList">
+                <li class="project-item">₹12 lakhs approved for drainage work in Ward 56</li>
+                <li class="project-item">₹8 lakhs for street lighting in Ward 34</li>
+                <li class="project-item">₹15 lakhs for school playground in Ward 89</li>
+            </ul>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <div class="section-title">AI Response</div>
+            <div class="ai-response" id="aiResponse"></div>
+        </div>
+
+        <!-- Error Message -->
+        <div class="error-message" id="errorMessage"></div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+
+        async function searchWard() {
+            const wardInput = document.getElementById("wardInput").value.trim();
+            if (!wardInput) {
+                showError("Please enter a ward number or question");
+                return;
+            }
+
+            await askQuestion(wardInput);
+        }
+
+        function selectArea(area) {
+            document.getElementById("wardInput").value = area;
+            searchWard();
+        }
+
+        async function askQuestion(question) {
+            showLoading(true);
+            hideError();
+
+            try {
+                const response = await fetch(`${API_URL}/ask`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ question })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                displayResults(data);
+            } catch (error) {
+                showError(`Error: ${error.message}. Make sure the backend is running on http://127.0.0.1:8000`);
+                console.error("Error:", error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function displayResults(data) {
+            const resultsSection = document.getElementById("resultsSection");
+            const aiResponse = document.getElementById("aiResponse");
+
+            // The response is already HTML formatted
+            aiResponse.innerHTML = data.answer || "No response received";
+            resultsSection.classList.add("show");
+
+            // Scroll to results
+            resultsSection.scrollIntoView({ behavior: "smooth" });
+        }
+
+        async function viewAllDelayed() {
+            await askQuestion("Show all delayed projects across Mumbai");
+        }
+
+        function showLoading(show) {
+            const loader = document.getElementById("loading");
+            if (show) {
+                loader.classList.add("show");
+            } else {
+                loader.classList.remove("show");
+            }
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById("errorMessage");
+            errorDiv.textContent = message;
+            errorDiv.classList.add("show");
+        }
+
+        function hideError() {
+            const errorDiv = document.getElementById("errorMessage");
+            errorDiv.classList.remove("show");
+        }
+
+        // Allow Enter key in search
+        document.getElementById("wardInput").addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                searchWard();
+            }
+        });
+    </script>
+</body>
+</html>
