@@ -236,6 +236,191 @@
         .error-message.show {
             display: block;
         }
+
+        /* PDF Upload Section */
+        .pdf-section {
+            border: 2px solid #d4a574;
+            padding: 30px;
+            margin-bottom: 30px;
+            background-color: #1a1a1a;
+        }
+
+        .pdf-title {
+            font-size: 18px;
+            color: #d4a574;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .upload-area {
+            border: 2px dashed #d4a574;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background-color: #2a2a2a;
+        }
+
+        .upload-area:hover {
+            background-color: #333;
+            border-color: #e0b583;
+        }
+
+        .upload-area.dragover {
+            background-color: #3a3a3a;
+            border-color: #e0b583;
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        .upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-text h3 {
+            color: #d4a574;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .upload-text p {
+            color: #a0a0a0;
+            font-size: 0.95em;
+            margin-bottom: 5px;
+        }
+
+        .file-name {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 4px;
+            color: #d4a574;
+            font-weight: bold;
+            display: none;
+        }
+
+        .file-name.show {
+            display: block;
+        }
+
+        .pdf-button-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pdf-btn {
+            padding: 12px 30px;
+            font-size: 1em;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .process-btn {
+            background-color: #d4a574;
+            color: #1a1a1a;
+            flex: 1;
+        }
+
+        .process-btn:hover:not(:disabled) {
+            background-color: #e0b583;
+        }
+
+        .process-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .clear-pdf-btn {
+            background-color: #444;
+            color: #e0e0e0;
+            flex: 1;
+        }
+
+        .clear-pdf-btn:hover {
+            background-color: #555;
+        }
+
+        .pdf-results {
+            border: 2px solid #d4a574;
+            padding: 25px;
+            margin-top: 30px;
+            display: none;
+            background-color: #1a1a1a;
+        }
+
+        .pdf-results.show {
+            display: block;
+        }
+
+        .pdf-summary {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-left: 3px solid #d4a574;
+            color: #e0e0e0;
+            line-height: 1.8;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .pdf-extracted {
+            background-color: #2a2a2a;
+            padding: 20px;
+            border-left: 3px solid #d4a574;
+            color: #e0e0e0;
+            line-height: 1.8;
+            max-height: 300px;
+            overflow-y: auto;
+            border-radius: 4px;
+        }
+
+        .pdf-success {
+            background-color: #2a4a2a;
+            border: 1px solid #4a8a4a;
+            color: #99ff99;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .pdf-success.show {
+            display: block;
+        }
+
+        .pdf-loading {
+            text-align: center;
+            color: #d4a574;
+            padding: 20px;
+            display: none;
+        }
+
+        .pdf-loading.show {
+            display: block;
+        }
+
+        .pdf-spinner {
+            border: 3px solid #444;
+            border-top: 3px solid #d4a574;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
@@ -272,10 +457,59 @@
             </div>
         </div>
 
+        <!-- PDF Upload Section -->
+        <div class="pdf-section">
+            <div class="pdf-title">📄 Analyze any PDF document</div>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">
+                    <h3>Upload your PDF</h3>
+                    <p>Click to select or drag and drop your PDF file</p>
+                    <p style="font-size: 0.85em; color: #666; margin-top: 10px;">Supported format: PDF</p>
+                </div>
+                <input type="file" id="fileInput" accept=".pdf" />
+                <div class="file-name" id="fileName"></div>
+            </div>
+            
+            <div class="pdf-button-group">
+                <button class="pdf-btn process-btn" id="submitBtn" disabled>Process PDF</button>
+                <button class="pdf-btn clear-pdf-btn" id="clearBtn">Clear</button>
+            </div>
+            
+            <div class="pdf-loading" id="pdfLoading">
+                <div class="pdf-spinner"></div>
+                <p>Processing your PDF...</p>
+                <p style="font-size: 0.9em; margin-top: 10px; color: #a0a0a0;">This may take a minute or two</p>
+            </div>
+            
+            <div class="pdf-success" id="successMsg"></div>
+            <div class="error-message" id="pdfErrorMsg"></div>
+        </div>
+
+        <!-- PDF Results Section -->
+        <div class="pdf-results" id="pdfResults">
+            <div class="section-title">
+                <span class="section-icon">✅</span>
+                <span>PDF ANALYSIS RESULTS</span>
+            </div>
+            
+            <div>
+                <h3 style="color: #d4a574; margin-bottom: 10px;">Summary</h3>
+                <div class="pdf-summary" id="summaryContent"></div>
+            </div>
+            
+            <div>
+                <h3 style="color: #d4a574; margin-bottom: 10px; margin-top: 20px;">Extracted Text</h3>
+                <div class="pdf-extracted" id="extractedContent"></div>
+            </div>
+        </div>
+
         <!-- Loading Indicator -->
         <div class="loading" id="loading">⏳ Loading data...</div>
 
-        <!-- Delayed Projects Section -->
+        <!-- Delayed Projects Section
+ -->
         <div class="info-section" id="delayedSection">
             <div class="section-title">
                 <span class="section-icon">⚠️</span>
@@ -399,6 +633,131 @@
                 searchWard();
             }
         });
+
+        // ==================== PDF UPLOAD FUNCTIONALITY ====================
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const submitBtn = document.getElementById('submitBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const pdfLoading = document.getElementById('pdfLoading');
+        const pdfResults = document.getElementById('pdfResults');
+        const pdfErrorMsg = document.getElementById('pdfErrorMsg');
+        const successMsg = document.getElementById('successMsg');
+        
+        let selectedFile = null;
+        
+        // Upload area click
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        // File selection
+        fileInput.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            updateFileDisplay();
+        });
+        
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                selectedFile = files[0];
+                fileInput.files = files;
+                updateFileDisplay();
+            }
+        });
+        
+        function updateFileDisplay() {
+            hidePdfMessages();
+            if (selectedFile) {
+                const nameElement = document.getElementById('fileName');
+                nameElement.textContent = '✓ ' + selectedFile.name;
+                nameElement.classList.add('show');
+                submitBtn.disabled = false;
+            } else {
+                document.getElementById('fileName').classList.remove('show');
+                submitBtn.disabled = true;
+            }
+        }
+        
+        // Submit PDF
+        submitBtn.addEventListener('click', async () => {
+            if (!selectedFile) {
+                showPdfError('Please select a PDF file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            pdfLoading.classList.add('show');
+            pdfResults.classList.remove('show');
+            hidePdfMessages();
+            
+            try {
+                const response = await fetch(`${API_URL}/upload-pdf`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to process PDF');
+                }
+                
+                const data = await response.json();
+                
+                document.getElementById('summaryContent').textContent = data.summary;
+                document.getElementById('extractedContent').textContent = data.extracted_text;
+                
+                pdfLoading.classList.remove('show');
+                pdfResults.classList.add('show');
+                showPdfSuccess('✓ PDF processed successfully!');
+                
+                // Scroll to results
+                pdfResults.scrollIntoView({ behavior: "smooth" });
+            } catch (error) {
+                pdfLoading.classList.remove('show');
+                showPdfError(error.message || 'An error occurred while processing the PDF');
+                console.error(error);
+            }
+        });
+        
+        // Clear
+        clearBtn.addEventListener('click', () => {
+            selectedFile = null;
+            fileInput.value = '';
+            fileName.classList.remove('show');
+            pdfResults.classList.remove('show');
+            pdfLoading.classList.remove('show');
+            hidePdfMessages();
+            submitBtn.disabled = true;
+        });
+        
+        function showPdfError(message) {
+            pdfErrorMsg.textContent = '❌ ' + message;
+            pdfErrorMsg.classList.add('show');
+        }
+        
+        function showPdfSuccess(message) {
+            successMsg.textContent = message;
+            successMsg.classList.add('show');
+        }
+        
+        function hidePdfMessages() {
+            pdfErrorMsg.classList.remove('show');
+            successMsg.classList.remove('show');
+        }
     </script>
 </body>
 </html>

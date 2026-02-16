@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -10,6 +10,11 @@ from dotenv import load_dotenv
 import ast
 import requests
 import re
+import shutil
+import tempfile
+import time
+from datetime import datetime
+from ocr_detection import extract_text_from_pdf, classify_meeting_data, generate_summary_from_db, generate_meeting_summary_with_prompt
 
 # -------------------- CONFIG --------------------
 load_dotenv()
@@ -44,6 +49,32 @@ app.add_middleware(
 )
 
 DB_PATH = "DATA_DB.db"
+
+# -------------------- INITIALIZE MEETING_DATA TABLE --------------------
+def init_meeting_data_table():
+    """Create Meeting_data table if it doesn't exist"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS Meeting_data (
+        meeting_id TEXT PRIMARY KEY,
+        objective TEXT,
+        meeting_date TEXT,
+        meeting_time TEXT,
+        attendees_present TEXT,
+        ward TEXT,
+        venue TEXT,
+        projects_discussed_list TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    ''')
+    
+    conn.commit()
+    conn.close()
+
+# Initialize the table on module load
+init_meeting_data_table()
 
 # -------------------- REQUEST MODEL --------------------
 class Question(BaseModel):
@@ -202,6 +233,210 @@ def detect_filters(question: str):
         filters["status"] = "In Progress"
 
     return filters
+
+
+# -------------------- MEETING INTENT + FILTERS --------------------
+def is_meeting_query(question: str) -> bool:
+    """Return True if the user is likely asking about meetings/minutes rather than projects."""
+    q = (question or "").lower()
+    meeting_keywords = [
+        "meeting",
+        "minutes",
+        "agenda",
+        "standing committee",
+        "committee meeting",
+        "meeting date",
+        "meeting time",
+        "attendees",
+        "venue",
+    ]
+    return any(k in q for k in meeting_keywords) or bool(re.search(r"\bMEET-\d{8}-[A-Z0-9]+\b", q.upper()))
+
+
+def _normalize_date_to_yyyy_mm_dd(s: str) -> Optional[str]:
+    """Best-effort date normalization for common formats."""
+    if not s:
+        return None
+    s = s.strip()
+    # Already ISO-like
+    m = re.search(r"\b(\d{4})-(\d{2})-(\d{2})\b", s)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+
+    # dd/mm/yyyy or dd-mm-yyyy
+    m = re.search(r"\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b", s)
+    if m:
+        dd = int(m.group(1))
+        mm = int(m.group(2))
+        yy = int(m.group(3))
+        if yy < 100:
+            yy = 2000 + yy
+        try:
+            return datetime(yy, mm, dd).strftime("%Y-%m-%d")
+        except Exception:
+            return None
+
+    # e.g. 16th December 2025 / 16 December 2025
+    m = re.search(
+        r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\s+(\d{4})\b",
+        s,
+        flags=re.IGNORECASE,
+    )
+    if m:
+        dd = int(m.group(1))
+        mon = m.group(2).lower()
+        yy = int(m.group(3))
+        month_map = {
+            "jan": 1, "january": 1,
+            "feb": 2, "february": 2,
+            "mar": 3, "march": 3,
+            "apr": 4, "april": 4,
+            "may": 5,
+            "jun": 6, "june": 6,
+            "jul": 7, "july": 7,
+            "aug": 8, "august": 8,
+            "sep": 9, "sept": 9, "september": 9,
+            "oct": 10, "october": 10,
+            "nov": 11, "november": 11,
+            "dec": 12, "december": 12,
+        }
+        mm = month_map.get(mon)
+        if not mm:
+            mm = month_map.get(mon[:3])
+        if not mm:
+            return None
+        try:
+            return datetime(yy, mm, dd).strftime("%Y-%m-%d")
+        except Exception:
+            return None
+
+    return None
+
+
+def detect_meeting_filters(question: str) -> dict:
+    """Detect filters for Meeting_data queries."""
+    q = (question or "").strip()
+    filters: dict = {}
+
+    # meeting_id
+    mid = re.search(r"\bMEET-\d{8}-[A-Z0-9]+\b", q.upper())
+    if mid:
+        filters["meeting_id"] = mid.group(0)
+
+    # date
+    d = _normalize_date_to_yyyy_mm_dd(q)
+    if d:
+        filters["meeting_date"] = d
+    else:
+        # try to find a date substring inside the question
+        m = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", q)
+        if m:
+            filters["meeting_date"] = m.group(1)
+        else:
+            m = re.search(r"\b(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})\b", q)
+            if m:
+                nd = _normalize_date_to_yyyy_mm_dd(m.group(1))
+                if nd:
+                    filters["meeting_date"] = nd
+
+    # ward: reuse existing ward parsing; map ward_no -> ward text filter
+    base = detect_filters(q)
+    if "ward" in base:
+        filters["ward"] = base["ward"]
+    if "ward_no" in base:
+        filters["ward"] = str(base["ward_no"])
+
+    # venue/objective keywords
+    vm = re.search(r"\bvenue[:\s]+(.{3,80}?)(?=(?:,|$))", q, flags=re.IGNORECASE)
+    if vm:
+        filters["venue"] = vm.group(1).strip()
+    om = re.search(r"\bobjective[:\s]+(.{3,120}?)(?=(?:,|$))", q, flags=re.IGNORECASE)
+    if om:
+        filters["objective"] = om.group(1).strip()
+
+    return filters
+
+
+def fetch_meetings(filters: dict):
+    """Fetch meeting records from Meeting_data with best-effort filtering."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    base_query = "SELECT * FROM Meeting_data"
+    conditions = []
+    values = []
+
+    if filters.get("meeting_id"):
+        conditions.append("meeting_id = ?")
+        values.append(filters["meeting_id"])
+
+    if filters.get("meeting_date"):
+        conditions.append("meeting_date = ?")
+        values.append(filters["meeting_date"])
+
+    if filters.get("ward"):
+        conditions.append("LOWER(ward) LIKE ?")
+        values.append(f"%{str(filters['ward']).lower()}%")
+
+    if filters.get("venue"):
+        conditions.append("LOWER(venue) LIKE ?")
+        values.append(f"%{str(filters['venue']).lower()}%")
+
+    if filters.get("objective"):
+        conditions.append("LOWER(objective) LIKE ?")
+        values.append(f"%{str(filters['objective']).lower()}%")
+
+    if conditions:
+        base_query += " WHERE " + " AND ".join(conditions)
+
+    base_query += " ORDER BY created_at DESC LIMIT 20"
+
+    print(f"[DEBUG] Meeting Query: {base_query}, Values: {values}")
+    cursor.execute(base_query, values)
+    rows = cursor.fetchall()
+    conn.close()
+
+    results = []
+    for r in rows:
+        d = dict(r)
+        # parse JSON list fields
+        for k in ("attendees_present", "projects_discussed_list"):
+            try:
+                raw = d.get(k)
+                if raw is None:
+                    d[k] = []
+                elif isinstance(raw, str):
+                    d[k] = json.loads(raw) if raw.strip() else []
+                else:
+                    d[k] = raw
+            except Exception:
+                d[k] = []
+        results.append(d)
+
+    return results
+
+
+def format_meeting_html(question: str, meetings: list, answer_text: str):
+    """Simple HTML wrapper for meeting answers to match existing UI patterns."""
+    header = f"<h3 style='color: #d4a574; margin-bottom: 20px;'>🗓️ Meeting Answer</h3>"
+    answer_html = f"<p style='background-color: #252525; padding: 15px; border-left: 3px solid #d4a574; margin-bottom: 20px;'>{str(answer_text).replace(chr(10), '<br>')}</p>"
+    if not meetings:
+        return header + answer_html + f"<p style='color: #ff9999;'>No meeting records found for: <strong>{question}</strong></p>"
+
+    cards = f"<h4 style='color: #d4a574; margin-bottom: 12px;'>Records used ({len(meetings)})</h4>"
+    for i, m in enumerate(meetings[:10], 1):
+        cards += f"""
+        <div style='border: 2px solid #d4a574; padding: 14px; margin-bottom: 14px; border-radius: 6px; background-color: #252525;'>
+          <div style='color:#e0e0e0;'><strong style='color:#d4a574;'>{i}. Meeting ID:</strong> {m.get('meeting_id','')}</div>
+          <div style='color:#e0e0e0;'><strong style='color:#d4a574;'>Date/Time:</strong> {m.get('meeting_date','') or 'N/A'} {m.get('meeting_time','') or ''}</div>
+          <div style='color:#e0e0e0;'><strong style='color:#d4a574;'>Ward:</strong> {m.get('ward','') or 'N/A'}</div>
+          <div style='color:#e0e0e0;'><strong style='color:#d4a574;'>Venue:</strong> {m.get('venue','') or 'N/A'}</div>
+          <div style='color:#e0e0e0;'><strong style='color:#d4a574;'>Objective:</strong> {m.get('objective','') or 'N/A'}</div>
+        </div>
+        """
+
+    return header + answer_html + cards
 
 # -------------------- FETCH DATA FROM SQLITE --------------------
 def fetch_projects(filters: dict):
@@ -567,6 +802,22 @@ def get_delayed():
 def search_projects(req: Question):
     """Search projects by question (uses AI filtering)"""
     try:
+        # Route meeting queries to Meeting_data
+        if is_meeting_query(req.question):
+            meeting_filters = detect_meeting_filters(req.question)
+            # Merge explicit filters from request body (take precedence)
+            if getattr(req, 'ward', None):
+                meeting_filters['ward'] = req.ward
+
+            records = fetch_meetings(meeting_filters)
+            return {
+                "query": req.question,
+                "source": "Meeting_data",
+                "filters_used": meeting_filters,
+                "results": records,
+                "count": len(records),
+            }
+
         filters = detect_filters(req.question)
         # Accept both `prompt` and `input` as the user-provided prompt
         if getattr(req, 'input', None) and not req.prompt:
@@ -601,34 +852,290 @@ def search_projects(req: Question):
 def ask_ai(req: Question):
     """Main AI-powered question answering endpoint"""
     try:
-        filters = detect_filters(req.question)
         # Accept both `prompt` and `input` as the user-provided prompt
-        if getattr(req, 'input', None) and not req.prompt:
-            req.prompt = req.input
-        # Merge explicit filters from request body (take precedence)
+        custom_prompt = req.prompt
+        if getattr(req, 'input', None) and not custom_prompt:
+            custom_prompt = req.input
+        
+        # Check if this is an explicit meeting query
+        is_explicit_meeting = is_meeting_query(req.question)
+        
+        if is_explicit_meeting:
+            # Explicit meeting query - route directly to meetings
+            meeting_filters = detect_meeting_filters(req.question)
+            if getattr(req, 'ward', None):
+                meeting_filters['ward'] = req.ward
+
+            meetings = fetch_meetings(meeting_filters)
+            
+            if not meetings:
+                answer = format_meeting_html(req.question, [], "No matching meeting record found in the database.")
+            else:
+                try:
+                    if custom_prompt:
+                        answer_text = generate_meeting_summary_with_prompt(meetings, custom_prompt)
+                    else:
+                        answer_text = generate_summary_from_db(meetings)
+                except Exception as e:
+                    answer_text = f"⚠️ Meeting summary generation failed: {str(e)}"
+                answer = format_meeting_html(req.question, meetings, answer_text)
+
+            return {
+                "source": "Meeting_data",
+                "filters_used": meeting_filters,
+                "records_found": len(meetings),
+                "answer": answer,
+                "data": meetings,
+            }
+        
+        # Not an explicit meeting query - search BOTH projects and meetings
+        # First, try to find projects
+        project_filters = detect_filters(req.question)
         if getattr(req, 'ward', None):
-            filters['ward'] = req.ward
+            project_filters['ward'] = req.ward
         if getattr(req, 'contractor', None):
-            filters['contractor'] = req.contractor
+            project_filters['contractor'] = req.contractor
         if getattr(req, 'project_name', None):
-            filters['project_name'] = req.project_name
+            project_filters['project_name'] = req.project_name
         if getattr(req, 'body_text', None):
-            filters['body_text'] = req.body_text
-        records = fetch_projects(filters)
-        answer = explain(req.question, records, user_prompt=req.prompt, user_model=getattr(req, 'model', None))
-
-        # Convert records to plain dicts for JSON serialization
-        data = [dict(r) if hasattr(r, 'keys') else r for r in records]
-
-        return {
-            "filters_used": filters,
-            "records_found": len(records),
-            "answer": answer,
-            "data": data
-        }
+            project_filters['body_text'] = req.body_text
+        
+        project_records = fetch_projects(project_filters)
+        
+        # Also search meetings using the same filters
+        meeting_filters = detect_meeting_filters(req.question)
+        if getattr(req, 'ward', None):
+            meeting_filters['ward'] = req.ward
+        
+        # Extract keywords from question to search meeting data
+        # Look for any meaningful words that might be in meeting data
+        question_lower = req.question.lower()
+        words = re.findall(r'\b[a-z]{3,}\b', question_lower)
+        stopwords = {'what', 'when', 'where', 'who', 'how', 'tell', 'show', 'give', 'about', 'with', 'from', 'planned', 'happening', 'discussed'}
+        keywords = [w for w in words if w not in stopwords]
+        
+        # Search meeting data for these keywords in various fields
+        meetings = []
+        if keywords:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            
+            # Build a search query that looks in multiple fields
+            search_conditions = []
+            search_values = []
+            
+            for keyword in keywords[:5]:  # Limit to first 5 keywords
+                like_pattern = f"%{keyword}%"
+                search_conditions.append("(LOWER(objective) LIKE ? OR LOWER(venue) LIKE ? OR LOWER(ward) LIKE ? OR LOWER(projects_discussed_list) LIKE ? OR LOWER(attendees_present) LIKE ?)")
+                search_values.extend([like_pattern] * 5)
+            
+            if search_conditions:
+                query = f"SELECT * FROM Meeting_data WHERE {' OR '.join(search_conditions)} ORDER BY created_at DESC LIMIT 10"
+                print(f"[DEBUG] Meeting search query: {query[:200]}...")
+                cursor.execute(query, search_values)
+                rows = cursor.fetchall()
+                
+                for r in rows:
+                    d = dict(r)
+                    # Parse JSON list fields
+                    for k in ("attendees_present", "projects_discussed_list"):
+                        try:
+                            raw = d.get(k)
+                            if raw is None:
+                                d[k] = []
+                            elif isinstance(raw, str):
+                                d[k] = json.loads(raw) if raw.strip() else []
+                            else:
+                                d[k] = raw
+                        except Exception:
+                            d[k] = []
+                    meetings.append(d)
+            
+            conn.close()
+        
+        # Decide which data source to use
+        # Priority: meetings if found, otherwise projects
+        if meetings:
+            # Found meeting data - use it!
+            try:
+                if custom_prompt:
+                    answer_text = generate_meeting_summary_with_prompt(meetings, custom_prompt)
+                else:
+                    answer_text = generate_summary_from_db(meetings)
+            except Exception as e:
+                answer_text = f"⚠️ Meeting summary generation failed: {str(e)}"
+            answer = format_meeting_html(req.question, meetings, answer_text)
+            
+            return {
+                "source": "Meeting_data",
+                "filters_used": meeting_filters,
+                "records_found": len(meetings),
+                "answer": answer,
+                "data": meetings,
+            }
+        else:
+            # No meetings found - use project data
+            answer = explain(req.question, project_records, user_prompt=custom_prompt, user_model=getattr(req, 'model', None))
+            data = [dict(r) if hasattr(r, 'keys') else r for r in project_records]
+            
+            return {
+                "source": "PROJECT_DATA",
+                "filters_used": project_filters,
+                "records_found": len(project_records),
+                "answer": answer,
+                "data": data
+            }
 
     except Exception as e:
         import traceback
         print(f"ERROR in /ask: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# -------------------- PDF UPLOAD ENDPOINT --------------------
+@app.get("/", response_class=HTMLResponse)
+def serve_ui():
+    """Serve the PDF upload UI - embedded in index.html via FastAPI"""
+    # The actual UI is served via index.html, this is a fallback
+    return """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>JanSaakshi</title>
+        <meta http-equiv="refresh" content="0; url=/static/index.html" />
+    </head>
+    <body>
+        <p>Redirecting to JanSaakshi...</p>
+    </body>
+    </html>
+    """
+
+
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    """Handle PDF upload, extract text, classify data, store in Meeting_data table, and generate summary from database"""
+    if not file.filename.endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Please upload a PDF file")
+    
+    temp_dir = None
+    try:
+        overall_start = time.perf_counter()
+
+        # Save uploaded file to temporary location
+        temp_dir = tempfile.mkdtemp()
+        temp_pdf_path = os.path.join(temp_dir, file.filename)
+        
+        with open(temp_pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        print(f"Processing PDF: {file.filename}")
+        
+        # Step 1: Extract text from PDF using OCR
+        ocr_start = time.perf_counter()
+        extracted_text = extract_text_from_pdf(temp_pdf_path)
+        ocr_duration = time.perf_counter() - ocr_start
+        print("Text extracted successfully")
+        
+        # Step 2: Classify meeting data from extracted text
+        classify_start = time.perf_counter()
+        classified_data = classify_meeting_data(extracted_text)
+        classify_duration = time.perf_counter() - classify_start
+        print("Meeting data classified successfully")
+        
+        # Step 3: Store classified data in Meeting_data table
+        store_start = time.perf_counter()
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        # Generate meeting_id if not provided
+        if not classified_data.get("meeting_id"):
+            from datetime import datetime
+            classified_data["meeting_id"] = f"MEET-{datetime.now().strftime('%Y%m%d')}-{file.filename[:10].upper().replace('.', '')}"
+        
+        # Convert lists to JSON strings for storage
+        attendees_json = json.dumps(classified_data.get("attendees_present", []) or [])
+        projects_json = json.dumps(classified_data.get("projects_discussed_list", []) or [])
+        
+        # Insert or replace meeting data
+        cursor.execute('''
+        INSERT OR REPLACE INTO Meeting_data 
+        (meeting_id, objective, meeting_date, meeting_time, attendees_present, ward, venue, projects_discussed_list)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            classified_data.get("meeting_id"),
+            classified_data.get("objective"),
+            classified_data.get("meeting_date"),
+            classified_data.get("meeting_time"),
+            attendees_json,
+            classified_data.get("ward"),
+            classified_data.get("venue"),
+            projects_json
+        ))
+        
+        conn.commit()
+        meeting_id = classified_data.get("meeting_id")
+        conn.close()
+        store_duration = time.perf_counter() - store_start
+        print(f"Meeting data stored in database with ID: {meeting_id}")
+        
+        # Step 4: Generate summary from database
+        summary_start = time.perf_counter()
+        # Fetch the stored meeting record
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Meeting_data WHERE meeting_id = ?", (meeting_id,))
+        meeting_record = cursor.fetchone()
+        conn.close()
+        
+        if meeting_record:
+            # Convert row to dict and parse JSON fields
+            meeting_dict = dict(meeting_record)
+            meeting_dict["attendees_present"] = json.loads(meeting_dict.get("attendees_present", "[]"))
+            meeting_dict["projects_discussed_list"] = json.loads(meeting_dict.get("projects_discussed_list", "[]"))
+            summary = generate_summary_from_db([meeting_dict])
+        else:
+            summary = "Meeting data stored but could not be retrieved for summary generation."
+        
+        summary_duration = time.perf_counter() - summary_start
+        total_duration = time.perf_counter() - overall_start
+        
+        return {
+            "status": "success",
+            "filename": file.filename,
+            "meeting_id": meeting_id,
+            "classified_data": classified_data,
+            "summary": summary,
+            "timings": {
+                "ocr_seconds": round(ocr_duration, 2),
+                "classification_seconds": round(classify_duration, 2),
+                "storage_seconds": round(store_duration, 2),
+                "summary_seconds": round(summary_duration, 2),
+                "total_seconds": round(total_duration, 2),
+            },
+        }
+    
+    except Exception as e:
+        print(f"Error processing PDF: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
+    
+    finally:
+        # Clean up temporary files
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        
+        # Clean up OCR output files
+        if os.path.exists("output.zip"):
+            try:
+                os.remove("output.zip")
+            except:
+                pass
+        if os.path.exists("output"):
+            try:
+                shutil.rmtree("output")
+            except:
+                pass
