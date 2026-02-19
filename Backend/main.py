@@ -53,7 +53,7 @@ DB_PATH = "DATA_DB.db"
 # -------------------- INITIALIZE MEETING_DATA TABLE --------------------
 def init_meeting_data_table():
     """Create Meeting_data table if it doesn't exist"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -66,7 +66,11 @@ def init_meeting_data_table():
         ward TEXT,
         venue TEXT,
         projects_discussed_list TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        allocated_budget INTEGER,
+        estimated_completion TEXT,
+        corporator_responsible TEXT,
+        timeline TEXT
     )
     ''')
     
@@ -165,7 +169,7 @@ def detect_filters(question: str):
             found = False
             conn = None
             try:
-                conn = sqlite3.connect(DB_PATH)
+                conn = sqlite3.connect(DB_PATH, timeout=30.0)
                 cursor = conn.cursor()
                 for n in range(max_n, 0, -1):
                     if found:
@@ -359,7 +363,7 @@ def detect_meeting_filters(question: str) -> dict:
 
 def fetch_meetings(filters: dict):
     """Fetch meeting records from Meeting_data with best-effort filtering."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -448,7 +452,7 @@ def fetch_projects(filters: dict):
         print("[DEBUG] fetch_projects: no filters provided — returning empty list")
         return []
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -718,7 +722,7 @@ def serve_test_page():
 def get_home():
     """Home/dashboard endpoint"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
@@ -743,7 +747,7 @@ def get_home():
 def get_ward(ward_no: int):
     """Get projects for a specific ward"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
@@ -763,7 +767,7 @@ def get_ward(ward_no: int):
 def get_project(project_id: int):
     """Get details of a specific project"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
@@ -782,7 +786,7 @@ def get_project(project_id: int):
 def get_delayed():
     """Get all delayed projects"""
     try:
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
@@ -917,7 +921,7 @@ def ask_ai(req: Question):
         # Search meeting data for these keywords in various fields
         meetings = []
         if keywords:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, timeout=30.0)
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             
@@ -1020,6 +1024,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Please upload a PDF file")
     
     temp_dir = None
+    conn = None
     try:
         overall_start = time.perf_counter()
 
@@ -1044,58 +1049,88 @@ async def upload_pdf(file: UploadFile = File(...)):
         classify_duration = time.perf_counter() - classify_start
         print("Meeting data classified successfully")
         
-        # Step 3: Store classified data in Meeting_data table
+        # Step 3: Store classified data - Create ONE Meeting_data row per PROJECT
         store_start = time.perf_counter()
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
         
-        # Generate meeting_id if not provided
+        # Generate base meeting_id if not provided
         if not classified_data.get("meeting_id"):
             from datetime import datetime
-            classified_data["meeting_id"] = f"MEET-{datetime.now().strftime('%Y%m%d')}-{file.filename[:10].upper().replace('.', '')}"
+            base_meeting_id = f"MEET-{datetime.now().strftime('%Y%m%d')}-{file.filename[:10].upper().replace('.', '')}"
+        else:
+            base_meeting_id = classified_data.get("meeting_id")
         
-        # Convert lists to JSON strings for storage
+        # Convert attendees list to JSON string
         attendees_json = json.dumps(classified_data.get("attendees_present", []) or [])
-        projects_json = json.dumps(classified_data.get("projects_discussed_list", []) or [])
         
-        # Insert or replace meeting data
-        cursor.execute('''
-        INSERT OR REPLACE INTO Meeting_data 
-        (meeting_id, objective, meeting_date, meeting_time, attendees_present, ward, venue, projects_discussed_list)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            classified_data.get("meeting_id"),
-            classified_data.get("objective"),
-            classified_data.get("meeting_date"),
-            classified_data.get("meeting_time"),
-            attendees_json,
-            classified_data.get("ward"),
-            classified_data.get("venue"),
-            projects_json
-        ))
+        # Extract projects
+        projects = classified_data.get("projects", [])
+        
+        # Use connection with timeout to prevent locking
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
+        cursor = conn.cursor()
+        
+        # Insert ONE row per project into Meeting_data
+        projects_inserted = 0
+        for idx, project in enumerate(projects, 1):
+            if not project.get("project_name"):
+                continue
+            
+            # Create unique meeting_id for each project
+            meeting_id = f"{base_meeting_id}-P{idx}"
+            
+            # Create projects_discussed_list with just this project
+            projects_json = json.dumps([project.get("project_name")])
+            
+            cursor.execute('''
+            INSERT OR REPLACE INTO Meeting_data 
+            (meeting_id, objective, meeting_date, meeting_time, attendees_present, ward, venue, projects_discussed_list,
+             allocated_budget, estimated_completion, corporator_responsible, timeline)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                meeting_id,
+                classified_data.get("objective"),
+                classified_data.get("meeting_date"),
+                classified_data.get("meeting_time"),
+                attendees_json,
+                classified_data.get("ward"),
+                classified_data.get("venue"),
+                projects_json,
+                project.get("allocated_budget"),
+                project.get("estimated_completion"),
+                classified_data.get("corporator_responsible"),
+                project.get("timeline")
+            ))
+            projects_inserted += 1
         
         conn.commit()
-        meeting_id = classified_data.get("meeting_id")
         conn.close()
+        conn = None
         store_duration = time.perf_counter() - store_start
-        print(f"Meeting data stored in database with ID: {meeting_id}")
+        print(f"Inserted {projects_inserted} project records into Meeting_data table")
+        
+        # Use the base meeting_id for summary
+        meeting_id = base_meeting_id
         
         # Step 4: Generate summary from database
         summary_start = time.perf_counter()
-        # Fetch the stored meeting record
-        conn = sqlite3.connect(DB_PATH)
+        # Fetch ALL project records for this meeting (all rows with meeting_id starting with base_meeting_id)
+        conn = sqlite3.connect(DB_PATH, timeout=30.0)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Meeting_data WHERE meeting_id = ?", (meeting_id,))
-        meeting_record = cursor.fetchone()
+        cursor.execute("SELECT * FROM Meeting_data WHERE meeting_id LIKE ?", (f"{meeting_id}%",))
+        meeting_records = cursor.fetchall()
         conn.close()
+        conn = None
         
-        if meeting_record:
-            # Convert row to dict and parse JSON fields
-            meeting_dict = dict(meeting_record)
-            meeting_dict["attendees_present"] = json.loads(meeting_dict.get("attendees_present", "[]"))
-            meeting_dict["projects_discussed_list"] = json.loads(meeting_dict.get("projects_discussed_list", "[]"))
-            summary = generate_summary_from_db([meeting_dict])
+        if meeting_records:
+            # Convert rows to dicts and parse JSON fields
+            meeting_dicts = []
+            for record in meeting_records:
+                meeting_dict = dict(record)
+                meeting_dict["attendees_present"] = json.loads(meeting_dict.get("attendees_present", "[]"))
+                meeting_dict["projects_discussed_list"] = json.loads(meeting_dict.get("projects_discussed_list", "[]"))
+                meeting_dicts.append(meeting_dict)
+            summary = generate_summary_from_db(meeting_dicts)
         else:
             summary = "Meeting data stored but could not be retrieved for summary generation."
         
@@ -1124,6 +1159,13 @@ async def upload_pdf(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Error processing PDF: {str(e)}")
     
     finally:
+        # Ensure database connection is closed
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+        
         # Clean up temporary files
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)

@@ -63,15 +63,17 @@ def extract_text_from_pdf(pdf_path):
 # STEP 2 — CLASSIFY MEETING DATA
 # =========================
 def classify_meeting_data(extracted_text: str):
-    """Extract structured meeting data from OCR text using AI classification"""
-    print("Classifying meeting data...")
+    """Extract structured meeting data from OCR text using AI classification - extracts MULTIPLE projects"""
+    print("Classifying meeting data and extracting all projects...")
     
     if client is None:
         raise RuntimeError("SARVAM_API_KEY is not configured; cannot classify meeting data.")
     
     prompt = f"""You are a data extraction assistant for Mumbai Municipal Corporation meeting documents.
 
-Extract structured information from the meeting document text below and return ONLY a valid JSON object with these exact fields:
+CRITICAL: This document contains MULTIPLE PROJECTS. Extract ALL of them.
+
+Extract structured information and return ONLY a valid JSON object with these exact fields:
 - meeting_id: A unique identifier (generate one if not found, format: "MEET-YYYYMMDD-XXX")
 - objective: Main purpose/objective of the meeting (string)
 - meeting_date: Date in YYYY-MM-DD format (string, or null if not found)
@@ -79,22 +81,36 @@ Extract structured information from the meeting document text below and return O
 - attendees_present: List of attendee names as a JSON array (array of strings, or empty array if not found)
 - ward: Ward name or number (string, or null if not found)
 - venue: Meeting venue/location (string, or null if not found)
-- projects_discussed_list: List of project names discussed as a JSON array (array of strings, or empty array if not found)
+- corporator_responsible: Name of the corporator responsible (string, or null if not found)
+- projects: Array of project objects, where EACH project has:
+  - project_name: Name of the project (string)
+  - allocated_budget: Budget for THIS specific project (integer number only, no currency)
+  - estimated_completion: Completion date for THIS project in YYYY-MM-DD format (string, or null)
+  - started_on: Start date for THIS project in YYYY-MM-DD format (string, or null)
+  - timeline: Timeline or duration for THIS project (string, or null)
+  - contractor_name: Contractor name for THIS project (string, or null)
+  - contractor_details: Additional contractor details (string, or null)
+  - description: Brief description of the project (string, or null)
 
-Important:
+CRITICAL INSTRUCTIONS:
+- Extract EVERY SINGLE PROJECT mentioned in the document
+- Each project should have its OWN budget, timeline, and completion date
+- Do NOT combine multiple projects into one
+- Do NOT make up budget values - extract EXACT amounts from the text
 - Return ONLY valid JSON, no markdown, no explanations, no code blocks
 - Use null for missing fields (not empty strings)
 - Extract dates in YYYY-MM-DD format
-- Extract times in HH:MM format (24-hour)
-- For arrays, use empty array [] if nothing found
+- For allocated_budget, extract only the numeric value (no currency symbols like ₹ or lakh)
+- If budget is in lakhs, convert to actual number (e.g., "41.4 lakh" = 4140000)
 
 DOCUMENT TEXT:
-{extracted_text[:15000]}
+{extracted_text[:20000]}
 """
     
     response = client.chat.completions(
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.3  # Lower temperature for more consistent extraction
+        temperature=0.2,  # Very low temperature for accurate extraction
+        max_tokens=3000
     )
     
     response_text = response.choices[0].message.content.strip()
@@ -107,6 +123,9 @@ DOCUMENT TEXT:
     
     try:
         classified_data = json.loads(response_text)
+        # Ensure projects field exists
+        if "projects" not in classified_data or not classified_data["projects"]:
+            classified_data["projects"] = []
         return classified_data
     except json.JSONDecodeError as e:
         print(f"Failed to parse JSON from AI response: {e}")
@@ -120,7 +139,8 @@ DOCUMENT TEXT:
             "attendees_present": [],
             "ward": None,
             "venue": None,
-            "projects_discussed_list": []
+            "corporator_responsible": None,
+            "projects": []
         }
 
 
@@ -141,54 +161,49 @@ def generate_summary_from_db(meeting_records):
     meetings_text = json.dumps(meeting_records, indent=2, default=str)
 
     prompt = f"""
-You are a helpful, friendly civic assistant for Mumbai who explains things clearly to local residents.
+You are a helpful civic assistant for Mumbai who provides clear, structured summaries.
 
-Always reply in clear, natural English, even if the original document was in another language.
-Write in a warm, conversational tone like you're explaining to a neighbor.
+Based ONLY on the meeting data below (which contains multiple project records from the same meeting), provide a summary in this EXACT format:
 
-Based ONLY on the meeting data below, provide a DETAILED, COMPREHENSIVE summary that covers:
+Summary: [Write a brief 6-line summary of the meeting covering the main points, objectives, and key discussions. Keep it natural and conversational. Maximum 6 lines only.]
 
-1. Meeting Overview:
-   - When and where the meeting took place
-   - Who attended (list all attendees if available)
-   - What was the main objective or purpose
+Ward No: [number]
+Ward Name: [name]
 
-2. Key Issues Discussed:
-   - Go through ALL projects mentioned in the data
-   - Explain each issue or topic in detail
-   - Include any concerns raised by attendees
+Corporator: [name]
 
-3. Decisions and Actions:
-   - What specific decisions were made
-   - Any budgets allocated or approved
-   - Deadlines or timelines set
-   - Who is responsible for what
+Projects Discussed:
+[List each project with its budget and completion date, one per line with a dash:
+- Project Name 1 (Budget: ₹X, Completion: date)
+- Project Name 2 (Budget: ₹X, Completion: date)
+- Project Name 3 (Budget: ₹X, Completion: date)]
 
-4. Impact on Residents:
-   - Why these decisions matter to local people
-   - What changes residents can expect
-   - Any benefits or improvements coming
+Meeting Date: [date]
+Meeting Time: [time]
+Venue: [location]
 
-IMPORTANT INSTRUCTIONS:
-- Be THOROUGH - analyze ALL the data provided, don't skip details
-- Use clear paragraph breaks for readability
-- Write in complete sentences, be conversational and friendly
-- Do NOT use markdown formatting, bullet points, asterisks, or headings
-- Do NOT include HTML tags like <br> or <p>
-- Just use plain English text with paragraph breaks
-- Don't invent information - only use what's in the data
-- Make it as DETAILED and LONG as needed to cover everything
+CRITICAL INSTRUCTIONS:
+- The summary section MUST be maximum 6 lines - be concise and natural
+- Write the summary in a conversational, easy-to-read style
+- List ALL projects with their individual budgets and completion dates
+- Each project should be on a separate line with a dash
+- Use simple, clear language
+- Do NOT use markdown formatting, asterisks for bold, or numbering (like 1., 2., 3.)
+- Do NOT include HTML tags
+- If a field is not available in the data, write "Not mentioned" or "N/A"
+- Base your answer ONLY on the meeting data provided
+- Keep the format clean with proper line breaks between sections
+- Extract budget and completion date from EACH record in the data
 
-MEETING DATA FROM DATABASE:
+MEETING DATA FROM DATABASE (Multiple project records):
 {meetings_text}
 """
 
     # SarvamAI Python SDK exposes `chat.completions` as a callable function.
-    # Increased max_tokens for longer, more detailed responses
     response = client.chat.completions(
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
-        max_tokens=2500
+        temperature=0.3,  # Lower temperature for consistency
+        max_tokens=2000
     )
 
     return response.choices[0].message.content
@@ -207,11 +222,55 @@ def generate_meeting_summary_with_prompt(meeting_records, user_prompt: str):
     # Format meeting records for the prompt
     meetings_text = json.dumps(meeting_records, indent=2, default=str)
 
-    prompt = f"""You are a helpful, friendly civic assistant for Mumbai.
+    # Check if user is asking for a summary specifically
+    is_summary_request = any(word in user_prompt.lower() for word in ['summary', 'summarize', 'summarise'])
+
+    if is_summary_request:
+        prompt = f"""You are a helpful civic assistant for Mumbai.
 
 User's Question: {user_prompt}
 
-MEETING DATA FROM DATABASE:
+MEETING DATA FROM DATABASE (Multiple project records from the same meeting):
+{meetings_text}
+
+The user is asking for a SUMMARY. Provide a clear, structured response in this EXACT format:
+
+Summary: [Write a brief 6-line summary of the meeting covering the main points, objectives, and key discussions. Keep it natural and conversational. Maximum 6 lines only.]
+
+Ward No: [number]
+Ward Name: [name]
+
+Corporator: [name]
+
+Projects Discussed:
+[List each project with its budget and completion date, one per line with a dash:
+- Project Name 1 (Budget: ₹X, Completion: date)
+- Project Name 2 (Budget: ₹X, Completion: date)
+- Project Name 3 (Budget: ₹X, Completion: date)]
+
+Meeting Date: [date]
+Meeting Time: [time]
+Venue: [location]
+
+CRITICAL INSTRUCTIONS:
+- The summary section MUST be maximum 6 lines - be concise and natural
+- Write the summary in a conversational, easy-to-read style
+- List ALL projects with their individual budgets and completion dates
+- Each project should be on a separate line with a dash
+- Use simple, clear language
+- Do NOT use markdown formatting, asterisks for bold, or numbering (like 1., 2., 3.)
+- Do NOT include HTML tags
+- If a field is not available in the data, write "Not mentioned" or "N/A"
+- Base your answer ONLY on the meeting data provided
+- Keep the format clean with proper line breaks between sections
+- Extract budget and completion date from EACH record in the data
+"""
+    else:
+        prompt = f"""You are a helpful, friendly civic assistant for Mumbai.
+
+User's Question: {user_prompt}
+
+MEETING DATA FROM DATABASE (Multiple project records):
 {meetings_text}
 
 Please provide a DETAILED, THOROUGH answer to the user's question based on the meeting data above.
@@ -230,11 +289,10 @@ IMPORTANT INSTRUCTIONS:
 """
 
     # SarvamAI Python SDK exposes `chat.completions` as a callable function.
-    # Increased max_tokens for longer, more detailed responses
     response = client.chat.completions(
         messages=[{"role": "user", "content": prompt}],
-        temperature=0.6,
-        max_tokens=2500
+        temperature=0.3,  # Lower temperature for consistency
+        max_tokens=2000
     )
 
     return response.choices[0].message.content
@@ -256,7 +314,7 @@ if __name__ == "__main__":
     print(json.dumps(classified, indent=2))
     
     # Store in database (for testing)
-    conn = sqlite3.connect("../DATA_DB.db")
+    conn = sqlite3.connect("../DATA_DB.db", timeout=30.0)
     cursor = conn.cursor()
     
     # Ensure table exists
@@ -270,7 +328,11 @@ if __name__ == "__main__":
         ward TEXT,
         venue TEXT,
         projects_discussed_list TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        allocated_budget INTEGER,
+        estimated_completion TEXT,
+        corporator_responsible TEXT,
+        timeline TEXT
     )
     ''')
     
@@ -280,8 +342,9 @@ if __name__ == "__main__":
     
     cursor.execute('''
     INSERT OR REPLACE INTO Meeting_data 
-    (meeting_id, objective, meeting_date, meeting_time, attendees_present, ward, venue, projects_discussed_list)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    (meeting_id, objective, meeting_date, meeting_time, attendees_present, ward, venue, projects_discussed_list, 
+     allocated_budget, estimated_completion, corporator_responsible, timeline)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', (
         classified.get("meeting_id"),
         classified.get("objective"),
@@ -290,7 +353,11 @@ if __name__ == "__main__":
         attendees_json,
         classified.get("ward"),
         classified.get("venue"),
-        projects_json
+        projects_json,
+        classified.get("allocated_budget"),
+        classified.get("estimated_completion"),
+        classified.get("corporator_responsible"),
+        classified.get("timeline")
     ))
     
     conn.commit()
