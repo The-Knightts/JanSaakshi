@@ -266,39 +266,10 @@ export default function HomePage() {
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h2 className="card-title">Ward Map — {cityLabel}</h2>
-          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Click a ward to see projects</span>
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Click a ward to see live stats</span>
         </div>
-        <WardMap city={city} onWardClick={handleWardClick} />
+        <WardMap />
       </div>
-
-      {/* Ward click panel */}
-      {selectedWard && (
-        <div className="card">
-          <div className="card-header">
-            <h2 className="card-title">Ward {selectedWard.no} — {selectedWard.name}</h2>
-            <button className="btn btn-outline" style={{ fontSize: '12px', padding: '4px 10px' }} onClick={() => setSelectedWard(null)}>Close</button>
-          </div>
-          {wardProjects.length === 0 ? (
-            <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>No projects in this ward.</p>
-          ) : wardProjects.map((p, i) => (
-            <div key={i} className="project-item">
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="project-name">{p.project_name}</div>
-                {p.summary && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '3px' }}>{p.summary}</p>}
-                <div className="project-meta">
-                  {p.budget ? `₹${(p.budget / 100000).toFixed(1)}L` : ''}
-                  {p.contractor_name ? ` · ${p.contractor_name}` : ''}
-                  {p.ward_zone ? ` · Zone ${p.ward_zone}` : ''}
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
-                <span className={statusBadge(p.status)}>{p.status}</span>
-                {p.delay_days > 0 && <div style={{ fontSize: '12px', color: 'var(--red)', marginTop: '3px', fontWeight: 600 }}>{p.delay_days}d late</div>}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Delayed */}
       <div className="card">

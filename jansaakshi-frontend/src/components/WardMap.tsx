@@ -1,128 +1,302 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import type L from 'leaflet';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { MapContainer, TileLayer, GeoJSON, ZoomControl } from 'react-leaflet';
+import type { Feature, FeatureCollection, GeoJsonObject, GeoJsonProperties } from 'geojson';
+import L from 'leaflet';
+import { useRouter } from "next/navigation";
 
-interface CityConfig {
-    lat: number;
-    lng: number;
-    zoom: number;
-    geojson: string;
-}
-
-const CITY_CONFIG: Record<string, CityConfig> = {
-    mumbai: { lat: 19.076, lng: 72.8777, zoom: 11, geojson: '/geojson/mumbai_wards.geojson' },
-    delhi: { lat: 28.6139, lng: 77.209, zoom: 11, geojson: '/geojson/delhi_wards.geojson' },
+type WardStat = {
+    wardNumber: number;
+    wardName: string;
+    corporatorName: string;
+    total: number;
+    active: number;
+    completed: number;
+    delayed: number;
+    stalled: number;
+    total_budget: number;
+    avg_delay_days: number;
 };
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+type StatsIndex = Record<number, WardStat>;
 
-interface WardMapProps {
-    city?: string;
-    onWardClick?: (wardNo: string, wardName: string) => void;
-}
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
-export default function WardMap({ city = 'mumbai', onWardClick }: WardMapProps) {
-    const mapRef = useRef<HTMLDivElement>(null);
-    const mapInstance = useRef<L.Map | null>(null);
-    const layerRef = useRef<L.GeoJSON | null>(null);
-    const [leaflet, setLeaflet] = useState<typeof L | null>(null);
+export default function WardMap() {
+
+    const [geojson, setGeojson] = useState<FeatureCollection | null>(null);
+    const [stats, setStats] = useState<StatsIndex>({});
+    const [selected, setSelected] = useState<number | null>(null);
+    const [query, setQuery] = useState('');
+    const mapRef = useRef<L.Map | null>(null);
+    const geoRef = useRef<L.GeoJSON | null>(null);
+    const popupRef = useRef<L.Popup | null>(null);
+    const router = useRouter();
+
+    // ---------------- LOAD DATA ----------------
+    useEffect(() => {
+        const load = async () => {
+            const [gRes, sRes] = await Promise.all([
+                fetch(`${API_BASE}/api/wards/geojson`),
+                fetch(`${API_BASE}/api/wards/stats`)
+            ]);
+
+            if (!gRes.ok) throw new Error('GeoJSON failed');
+
+            const g = (await gRes.json()) as FeatureCollection;
+            const s = (await sRes.json()) as WardStat[];
+
+            const index: StatsIndex = {};
+            for (const w of s) index[w.wardNumber] = w;
+
+            setGeojson(g);
+            setStats(index);
+        };
+
+        load().catch(console.error);
+    }, []);
+
+    // ---------------- FORCE LEAFLET RESIZE ----------------
+    useEffect(() => {
+        if (!mapRef.current) return;
+
+        const t = setTimeout(() => {
+            mapRef.current?.invalidateSize();
+        }, 600);
+
+        return () => clearTimeout(t);
+    }, [geojson]);
 
     useEffect(() => {
-        if (typeof window === 'undefined') return;
-        import('leaflet').then((m) => {
-            setLeaflet(m.default || m);
-            import('leaflet/dist/leaflet.css');
-        });
+
+        const handler = (e: any) => {
+            const ward = e.detail;
+            console.log("Ward clicked:", ward);
+
+            // 👇 later we will route here
+            // router.push(`/wards/${ward}`)
+        };
+
+        window.addEventListener("ward-click", handler);
+
+        return () => {
+            window.removeEventListener("ward-click", handler);
+        };
+
     }, []);
 
     useEffect(() => {
-        if (!leaflet || !mapRef.current) return;
-        const cfg = CITY_CONFIG[city] || CITY_CONFIG.mumbai;
 
-        if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; }
+        const handleWardClick = (e: any) => {
 
-        const map = leaflet.map(mapRef.current).setView([cfg.lat, cfg.lng], cfg.zoom);
-        leaflet.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap', maxZoom: 18,
-        }).addTo(map);
-        mapInstance.current = map;
-        loadWards(map, cfg);
+            const wardNumber = e.detail;
 
-        return () => { if (mapInstance.current) { mapInstance.current.remove(); mapInstance.current = null; } };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [leaflet, city]);
+            router.push(`/projects?ward=${wardNumber}`);
+            // OR if you have dynamic route:
+            // router.push(`/wards/${wardNumber}`)
+        };
 
-    const loadWards = async (map: L.Map, cfg: CityConfig) => {
-        if (!leaflet) return;
-        try {
-            const geoRes = await fetch(cfg.geojson);
-            const geoData = await geoRes.json();
+        window.addEventListener("ward-click", handleWardClick);
 
-            const stats: Record<string, any> = {};
-            try {
-                const sRes = await fetch(`${API}/api/wards?city=${city}`);
-                const wardStats = await sRes.json();
-                if (Array.isArray(wardStats)) wardStats.forEach((w: any) => { stats[w.ward_no] = w; });
-            } catch { }
+        return () => {
+            window.removeEventListener("ward-click", handleWardClick);
+        };
 
-            if (layerRef.current) map.removeLayer(layerRef.current);
+    }, []);
 
-            layerRef.current = leaflet.geoJSON(geoData, {
-                pointToLayer: (f: any, latlng: L.LatLng) => {
-                    const wn = f.properties.ward_no || f.properties.ward_number || f.properties.WARD_NO;
-                    const s = stats[wn] || {};
-                    const d = s.delayed_projects || 0;
-                    const color = d === 0 ? '#16a34a' : d <= 2 ? '#d97706' : '#dc2626';
-                    return leaflet.circleMarker(latlng, {
-                        radius: 14, fillColor: color, fillOpacity: 0.6,
-                        stroke: true, weight: 2, color: '#fff',
+    // ---------------- STYLE ----------------
+    const styleFn = useCallback((feature: Feature) => {
+        const props = feature.properties as GeoJsonProperties;
+        const wardNumber = Number((props as any)?.wardNumber);
+
+        return {
+            fillColor: "#ffffff",
+            fillOpacity: 0.25,
+            color: "#000000",
+            weight: selected === wardNumber ? 2 : 1,
+        } as L.PathOptions;
+
+    }, [selected]);
+
+    // ---------------- FEATURE ----------------
+    const onEachFeature = useCallback((feature: Feature, layer: L.Layer) => {
+
+        const props = feature.properties as any;
+        const wardNumber = Number(props?.wardNumber);
+        const wardName = props?.wardName || `Ward ${wardNumber}`;
+
+        // ✅ THIS SHOWS WARD NUMBER AT CENTER
+        (layer as L.Path).bindTooltip(`${wardNumber}`, {
+            permanent: true,
+            direction: "center",
+            className: "ward-number-clean",
+            opacity: 1
+        });
+
+        layer.on({
+            click: (e: L.LeafletMouseEvent) => {
+
+                const map = mapRef.current;
+                if (!map) return;
+
+                setSelected(wardNumber);
+
+                const target = e.target as L.Polygon;
+
+                if (target.getBounds) {
+                    map.fitBounds(target.getBounds(), {
+                        animate: true,
+                        duration: 0.5,
+                        padding: [40, 40]
                     });
-                },
-                onEachFeature: (f: any, layer: L.Layer) => {
-                    const wn = f.properties.ward_no || f.properties.ward_number || f.properties.WARD_NO;
-                    const wname = f.properties.ward_name || '';
-                    const wzone = f.properties.ward_zone || '';
-                    const s = stats[wn] || {};
+                }
 
-                    (layer as any).bindPopup(`
-            <div style="font-family:Inter,sans-serif;min-width:150px">
-              <h3 style="margin:0 0 2px;font-size:15px;font-weight:600">Ward ${wn}</h3>
-              <p style="margin:0 0 6px;color:#64748b;font-size:13px">${wname}${wzone ? ` (${wzone})` : ''}</p>
-              <div style="font-size:13px">
-                <div>Projects: <b>${s.total_projects || 0}</b></div>
-                <div>Delayed: <b style="color:#dc2626">${s.delayed_projects || 0}</b></div>
-                <div>Completed: <b style="color:#16a34a">${s.completed_projects || 0}</b></div>
-                ${s.ward_zone ? `<div>Zone: <b>${s.ward_zone}</b></div>` : ''}
-              </div>
-            </div>
-          `);
+                const st = stats[wardNumber];
 
-                    (layer as any).bindTooltip(wzone || wn, { permanent: true, direction: 'center', className: 'ward-label' });
-                    layer.on('click', () => onWardClick?.(wn, wname));
-                    layer.on('mouseover', () => (layer as any).setStyle({ fillOpacity: 1, weight: 3 }));
-                    layer.on('mouseout', () => (layer as any).setStyle({ fillOpacity: 0.6, weight: 2 }));
-                },
-            }).addTo(map);
-        } catch (e) { console.error('Map load error:', e); }
+                // ── Build rich popup with real stats ──────────────────
+                const total = st?.total ?? 0;
+                const completed = st?.completed ?? 0;
+                const delayed = st?.delayed ?? 0;
+                const active = st?.active ?? 0;
+                const stalled = st?.stalled ?? 0;
+                const budget = st?.total_budget ?? 0;
+                const avgDelay = st?.avg_delay_days ?? 0;
+                const corp = st?.corporatorName ?? '';
+                const compPct = total > 0 ? Math.round((completed / total) * 100) : 0;
+                const delPct = total > 0 ? Math.round((delayed / total) * 100) : 0;
+                const budgetStr = budget >= 10_000_000
+                    ? `₹${(budget / 10_000_000).toFixed(1)} Cr`
+                    : budget > 0 ? `₹${(budget / 100_000).toFixed(1)} L` : '';
+                const compBar = total > 0 ? (completed / total) * 100 : 0;
+                const actBar = total > 0 ? (active / total) * 100 : 0;
+                const delBar = total > 0 ? (delayed / total) * 100 : 0;
+                const stalBar = total > 0 ? (stalled / total) * 100 : 0;
+
+                const popupHTML = `
+                <div style="min-width:210px;font-family:system-ui,sans-serif;font-size:13px;color:#1e293b">
+
+                    <div style="font-weight:700;font-size:15px">Ward ${wardNumber}</div>
+                    <div style="font-size:11px;color:#6b7280;margin-bottom:${corp ? 2 : 8}px">${wardName}</div>
+                    ${corp ? `<div style="font-size:10px;color:#94a3b8;margin-bottom:8px">🏛 ${corp}</div>` : ''}
+
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+                        <div style="background:#f1f5f9;border-radius:7px;padding:7px 9px;text-align:center">
+                            <div style="font-size:17px;font-weight:800;color:#1d4ed8">${total}</div>
+                            <div style="font-size:9px;color:#94a3b8">Total</div>
+                        </div>
+                        <div style="background:#fef2f2;border-radius:7px;padding:7px 9px;text-align:center">
+                            <div style="font-size:17px;font-weight:800;color:#dc2626">${delayed}</div>
+                            <div style="font-size:9px;color:#94a3b8">Delayed</div>
+                        </div>
+                        <div style="background:#f0fdf4;border-radius:7px;padding:7px 9px;text-align:center">
+                            <div style="font-size:17px;font-weight:800;color:#16a34a">${completed}</div>
+                            <div style="font-size:9px;color:#94a3b8">Completed</div>
+                        </div>
+                        <div style="background:#fffbeb;border-radius:7px;padding:7px 9px;text-align:center">
+                            <div style="font-size:17px;font-weight:800;color:#d97706">${active}</div>
+                            <div style="font-size:9px;color:#94a3b8">In Progress</div>
+                        </div>
+                    </div>
+
+                    ${total > 0 ? `
+                    <div style="margin-bottom:8px">
+                        <div style="display:flex;height:5px;border-radius:4px;overflow:hidden;background:#e2e8f0">
+                            <div style="width:${compBar}%;background:#22c55e"></div>
+                            <div style="width:${actBar}%;background:#f59e0b"></div>
+                            <div style="width:${delBar}%;background:#ef4444"></div>
+                            <div style="width:${stalBar}%;background:#a855f7"></div>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:4px;font-size:9px;color:#64748b">
+                            ${completed > 0 ? `<span>🟢 ${compPct}%</span>` : ''}
+                            ${delayed > 0 ? `<span>🔴 ${delPct}% delayed</span>` : ''}
+                            ${stalled > 0 ? `<span>🟣 ${stalled} stalled</span>` : ''}
+                        </div>
+                    </div>` : ''}
+
+                    ${budgetStr || avgDelay > 0 ? `
+                    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+                        ${budgetStr ? `<span style="font-size:10px;background:#f1f5f9;padding:3px 7px;border-radius:5px;color:#64748b">💰 ${budgetStr}</span>` : ''}
+                        ${avgDelay > 0 ? `<span style="font-size:10px;background:#fef2f2;padding:3px 7px;border-radius:5px;color:#dc2626">⏱ ${Math.round(avgDelay)}d avg delay</span>` : ''}
+                    </div>` : ''}
+
+                    <button
+                        onclick="window.dispatchEvent(new CustomEvent('ward-click',{detail:${wardNumber}}))"
+                        style="width:100%;padding:7px;border:none;background:#4f46e5;color:white;border-radius:7px;cursor:pointer;font-size:12px;font-weight:600"
+                    >View Projects →</button>
+                </div>
+            `;
+
+                if (popupRef.current) {
+                    popupRef.current.remove();
+                }
+
+                popupRef.current = L.popup({
+                    closeButton: true,
+                    autoClose: true,
+                    closeOnClick: true,
+                    offset: L.point(0, -10),
+                    className: "ward-popup"
+                })
+                    .setLatLng(e.latlng)
+                    .setContent(popupHTML)
+                    .openOn(map);
+
+            }
+        });
+
+    }, [stats]);
+
+    // ---------------- SEARCH ----------------
+    const handleSearch = () => {
+        const num = Number(query);
+        if (!geoRef.current || Number.isNaN(num)) return;
+
+        geoRef.current.eachLayer((l: any) => {
+            const wn = Number(l.feature?.properties?.wardNumber);
+            if (wn === num && mapRef.current) {
+                mapRef.current.fitBounds(l.getBounds(), {
+                    animate: true,
+                    padding: [20, 20]
+                });
+            }
+        });
     };
 
     return (
-        <div style={{ position: 'relative' }}>
-            <div ref={mapRef} style={{ height: '500px', width: '100%' }} />
-            <div style={{
-                position: 'absolute', bottom: 12, right: 12, background: 'rgba(255,255,255,.95)',
-                padding: '8px 12px', borderRadius: 8, border: '1px solid var(--border)', zIndex: 1000,
-                boxShadow: 'var(--shadow)',
-            }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.3px' }}>Status</div>
-                {[{ c: '#16a34a', l: 'No Delays' }, { c: '#d97706', l: '1-2 Delays' }, { c: '#dc2626', l: '3+ Delays' }].map(i => (
-                    <div key={i.l} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2 }}>
-                        <div style={{ width: 9, height: 9, borderRadius: '50%', background: i.c }} />
-                        <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{i.l}</span>
-                    </div>
-                ))}
-            </div>
+        <div style={{ width: '100%', height: '80vh' }}>
+            <MapContainer
+                whenReady={(e) => {
+                    mapRef.current = e.target;
+                    setTimeout(() => {
+                        e.target.invalidateSize();
+                    }, 600);
+                }}
+                style={{ width: '100%', height: '100%' }}
+                zoom={10}
+                minZoom={13}
+                maxZoom={20}
+                center={[19.076, 72.8777]}
+                zoomControl={false}
+                preferCanvas
+            >
+                <TileLayer
+                    attribution=""
+                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                />
+
+                {geojson && (
+                    <GeoJSON
+                        ref={geoRef}
+                        data={geojson as GeoJsonObject}
+                        style={styleFn}
+                        onEachFeature={onEachFeature}
+                    />
+                )}
+
+                <ZoomControl position="bottomright" />
+            </MapContainer>
         </div>
     );
 }

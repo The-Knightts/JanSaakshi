@@ -8,6 +8,8 @@ from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
+from wards_route import ward_bp
+
 
 from utils.pdf_processor import extract_data_from_pdf, extract_projects_from_pdf, generate_project_summary
 from utils.context_generator import extract_keywords_from_query, add_context_to_results
@@ -35,6 +37,7 @@ init_database()
 
 _sessions = {}
 
+app.register_blueprint(ward_bp, url_prefix="/api/wards")
 
 def allowed_file(fn):
     return "." in fn and fn.rsplit(".", 1)[1].lower() == "pdf"
@@ -365,6 +368,77 @@ def api_wards():
     return jsonify(get_ward_stats(city_id=cid))
 
 
+@app.route("/api/wards/stats")
+def api_wards_stats():
+    """Ward stats in the shape WardMap expects."""
+    cid = resolve_city_id()
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    params = []
+    w = ""
+    if cid:
+        w = " AND city_id=?"
+        params.append(cid)
+    rows = conn.execute(f"""
+        SELECT
+            ward_no,
+            MAX(ward_name) as ward_name,
+            MAX(corporator_name) as corporator_name,
+            COUNT(*) as total,
+            SUM(CASE WHEN LOWER(status)='completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN LOWER(status)='delayed'   THEN 1 ELSE 0 END) as delayed,
+            SUM(CASE WHEN LOWER(status)='in progress' OR LOWER(status)='ongoing' THEN 1 ELSE 0 END) as active,
+            SUM(CASE WHEN LOWER(status)='stalled'   THEN 1 ELSE 0 END) as stalled,
+            COALESCE(SUM(budget), 0) as total_budget,
+            COALESCE(AVG(CASE WHEN delay_days > 0 THEN delay_days END), 0) as avg_delay_days
+        FROM projects
+        WHERE ward_no IS NOT NULL AND ward_no != ''
+        {w}
+        GROUP BY ward_no
+        ORDER BY ward_no
+    """, params).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        result.append({
+            "wardNumber": d["ward_no"],
+            "wardName": d["ward_name"] or f"Ward {d['ward_no']}",
+            "corporatorName": d["corporator_name"] or "",
+            "total": d["total"],
+            "completed": d["completed"],
+            "delayed": d["delayed"],
+            "active": d["active"],
+            "stalled": d["stalled"],
+            "total_budget": d["total_budget"],
+            "avg_delay_days": round(d["avg_delay_days"] or 0, 1),
+        })
+    return jsonify(result)
+
+
+@app.route("/api/wards/geojson")
+def api_wards_geojson():
+    """Serve ward GeoJSON with CORS headers."""
+    geojson_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "wards.geojson")
+    if not os.path.exists(geojson_path):
+        return jsonify({"type": "FeatureCollection", "features": []}), 200
+    with open(geojson_path, "r", encoding="utf-8") as f:
+        import json as _json
+        raw = _json.load(f)
+    features = []
+    for feat in raw.get("features", []):
+        try:
+            wn = int(feat["properties"].get("note", 0))
+        except (ValueError, TypeError):
+            wn = 0
+        features.append({
+            "type": "Feature",
+            "properties": {"wardNumber": wn, "wardName": f"Ward {wn}"},
+            "geometry": feat["geometry"],
+        })
+    return jsonify({"type": "FeatureCollection", "features": features})
+
+
 @app.route("/api/projects/ward/<ward_no>")
 def api_ward_projects(ward_no):
     cid = resolve_city_id()
@@ -432,6 +506,74 @@ def api_search():
         min_delay=request.args.get("min_delay", type=int),
     )
     return jsonify({"results": results, "count": len(results)})
+
+
+# ==================== CONTRACTORS ====================
+
+
+@app.route("/api/contractors")
+def api_contractors():
+    cid = resolve_city_id()
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    params = []
+    w = ""
+    if cid:
+        w = " AND city_id=?"
+        params.append(cid)
+    rows = conn.execute(f"""
+        SELECT
+            contractor_name,
+            COUNT(*) as total_projects,
+            SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status='delayed' THEN 1 ELSE 0 END) as delayed,
+            SUM(CASE WHEN status='in progress' THEN 1 ELSE 0 END) as in_progress,
+            SUM(CASE WHEN status='stalled' THEN 1 ELSE 0 END) as stalled,
+            COALESCE(SUM(budget), 0) as total_budget,
+            COALESCE(AVG(CASE WHEN delay_days > 0 THEN delay_days END), 0) as avg_delay_days,
+            MAX(delay_days) as max_delay_days,
+            COUNT(DISTINCT ward_no) as wards_count,
+            GROUP_CONCAT(DISTINCT project_type) as project_types
+        FROM projects
+        WHERE contractor_name IS NOT NULL AND contractor_name != ''
+        {w}
+        GROUP BY contractor_name
+        ORDER BY total_projects DESC
+    """, params).fetchall()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        total = d["total_projects"] or 1
+        d["delay_pct"] = round((d["delayed"] / total) * 100, 1)
+        d["completion_pct"] = round((d["completed"] / total) * 100, 1)
+        d["project_types"] = [t for t in (d["project_types"] or "").split(",") if t]
+        result.append(d)
+    return jsonify({"contractors": result, "count": len(result)})
+
+
+@app.route("/api/contractor-projects")
+def api_contractor_projects():
+    """Get projects for a specific contractor using ?name= query param."""
+    contractor_name = request.args.get("name", "").strip()
+    if not contractor_name:
+        return jsonify({"error": "name parameter required"}), 400
+    cid = resolve_city_id()
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    params = [contractor_name]
+    w = ""
+    if cid:
+        w = " AND p.city_id=?"
+        params.append(cid)
+    projects_rows = conn.execute(f"""
+        SELECT p.*, c.city_name FROM projects p
+        JOIN city c ON p.city_id=c.city_id
+        WHERE LOWER(p.contractor_name)=LOWER(?) {w}
+        ORDER BY p.delay_days DESC, p.created_at DESC
+    """, params).fetchall()
+    conn.close()
+    return jsonify({"projects": [dict(r) for r in projects_rows], "count": len(projects_rows)})
 
 
 # ==================== CITIES ====================

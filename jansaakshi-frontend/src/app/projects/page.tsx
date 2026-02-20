@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useApp } from '@/context/AppContext';
+import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function ProjectsPage() {
+function ProjectsList() {
     const { apiFetch } = useApp();
+    const searchParams = useSearchParams();
+    const router = useRouter();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [filter, setFilter] = useState({ status: '', type: '', q: '' });
+    const [filter, setFilter] = useState({
+        status: searchParams.get('status') || '',
+        type: searchParams.get('type') || '',
+        q: searchParams.get('q') || '',
+        ward: searchParams.get('ward') || ''
+    });
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -16,6 +24,7 @@ export default function ProjectsPage() {
             if (filter.status) params.set('status', filter.status);
             if (filter.type) params.set('type', filter.type);
             if (filter.q) params.set('q', filter.q);
+            if (filter.ward) params.set('ward', filter.ward);
             const res = await apiFetch(`/api/projects?${params}`);
             if (res.ok) setProjects((await res.json()).projects || []);
         } catch { }
@@ -24,11 +33,33 @@ export default function ProjectsPage() {
 
     useEffect(() => { load(); }, [load]);
 
+    const clearWard = () => {
+        setFilter({ ...filter, ward: '' });
+        const params = new URLSearchParams(window.location.search);
+        params.delete('ward');
+        router.push(`/projects?${params.toString()}`);
+    };
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div>
-                <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '4px' }}>Projects</h1>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>All municipal projects in your city</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                    <h1 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '4px' }}>Projects</h1>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>All municipal projects in your city</p>
+                </div>
+                {filter.ward && (
+                    <div style={{
+                        background: '#eff6ff', border: '1px solid #bfdbfe', color: '#1d4ed8',
+                        padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
+                        display: 'flex', alignItems: 'center', gap: '8px'
+                    }}>
+                        Ward {filter.ward}
+                        <button onClick={clearWard} style={{
+                            border: 'none', background: 'none', color: '#1d4ed8', cursor: 'pointer',
+                            fontSize: '16px', padding: '0 4px', display: 'flex', alignItems: 'center'
+                        }}>×</button>
+                    </div>
+                )}
             </div>
 
             <div className="card" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -78,7 +109,7 @@ export default function ProjectsPage() {
                                     </div>
                                 </div>
                                 <div style={{ textAlign: 'right', flexShrink: 0, marginLeft: '12px' }}>
-                                    <span className={`status-badge status-${p.status || 'pending'}`}>{p.status || 'pending'}</span>
+                                    <span className={`status-badge status-${(p.status || 'pending').toLowerCase()}`}>{p.status || 'pending'}</span>
                                     {p.delay_days > 0 && <div style={{ fontSize: '12px', color: 'var(--red)', marginTop: '3px', fontWeight: 600 }}>{p.delay_days}d late</div>}
                                 </div>
                             </div>
@@ -87,5 +118,13 @@ export default function ProjectsPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function ProjectsPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <ProjectsList />
+        </Suspense>
     );
 }

@@ -1,8 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { API_BASE } from '@/lib/config';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API = API_BASE;
 
 interface AppContextValue {
     user: any;

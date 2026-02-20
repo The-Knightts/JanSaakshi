@@ -2,6 +2,7 @@ import './globals.css';
 import { AppProvider } from '@/context/AppContext';
 import Navigation from '@/components/Navigation';
 import type { Metadata } from 'next';
+import 'leaflet/dist/leaflet.css';
 
 export const metadata: Metadata = {
     title: 'JanSaakshi — Municipal Accountability',
@@ -19,7 +20,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <body>
                 <AppProvider>
                     <Navigation />
-                    <main className="page-container">{children}</main>
+                    <main className="page-container" style={{paddingTop:150}}>{children}</main>
                 </AppProvider>
             </body>
         </html>
