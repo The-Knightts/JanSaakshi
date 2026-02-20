@@ -1,0 +1,365 @@
+{
+    "type": "FeatureCollection",
+    "features": [
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "A",
+                "ward_name": "Colaba",
+                "WARD_NO": "A"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8136,
+                    18.9067
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "B",
+                "ward_name": "Sandhurst Road",
+                "WARD_NO": "B"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8358,
+                    18.9580
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "C",
+                "ward_name": "Marine Lines",
+                "WARD_NO": "C"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8226,
+                    18.9432
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "D",
+                "ward_name": "Grant Road",
+                "WARD_NO": "D"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8145,
+                    18.9637
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "E",
+                "ward_name": "Byculla",
+                "WARD_NO": "E"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8333,
+                    18.9753
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "F/N",
+                "ward_name": "Matunga",
+                "WARD_NO": "F/N"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8560,
+                    19.0280
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "F/S",
+                "ward_name": "Parel",
+                "WARD_NO": "F/S"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8421,
+                    19.0000
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "G/N",
+                "ward_name": "Dadar",
+                "WARD_NO": "G/N"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8443,
+                    19.0178
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "G/S",
+                "ward_name": "Worli",
+                "WARD_NO": "G/S"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8175,
+                    19.0022
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "H/E",
+                "ward_name": "Bandra East",
+                "WARD_NO": "H/E"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8544,
+                    19.0596
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "H/W",
+                "ward_name": "Bandra West",
+                "WARD_NO": "H/W"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8307,
+                    19.0596
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "K/E",
+                "ward_name": "Andheri East",
+                "WARD_NO": "K/E"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8697,
+                    19.1136
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "K/W",
+                "ward_name": "Andheri West",
+                "WARD_NO": "K/W"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8362,
+                    19.1197
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "L",
+                "ward_name": "Kurla",
+                "WARD_NO": "L"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8795,
+                    19.0726
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "M/E",
+                "ward_name": "Chembur",
+                "WARD_NO": "M/E"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8977,
+                    19.0622
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "M/W",
+                "ward_name": "Mahim",
+                "WARD_NO": "M/W"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8438,
+                    19.0430
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "N",
+                "ward_name": "Ghatkopar",
+                "WARD_NO": "N"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.9081,
+                    19.0860
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "P/N",
+                "ward_name": "Malad",
+                "WARD_NO": "P/N"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8492,
+                    19.1868
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "P/S",
+                "ward_name": "Goregaon",
+                "WARD_NO": "P/S"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8556,
+                    19.1551
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "R/C",
+                "ward_name": "Borivali",
+                "WARD_NO": "R/C"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8567,
+                    19.2307
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "R/N",
+                "ward_name": "Dahisar",
+                "WARD_NO": "R/N"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8637,
+                    19.2588
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "R/S",
+                "ward_name": "Kandivali",
+                "WARD_NO": "R/S"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.8527,
+                    19.2094
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "S",
+                "ward_name": "Bhandup",
+                "WARD_NO": "S"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.9370,
+                    19.1480
+                ]
+            }
+        },
+        {
+            "type": "Feature",
+            "properties": {
+                "ward_number": "T",
+                "ward_name": "Mulund",
+                "WARD_NO": "T"
+            },
+            "geometry": {
+                "type": "Point",
+                "coordinates": [
+                    72.9563,
+                    19.1726
+                ]
+            }
+        }
+    ]
+}
