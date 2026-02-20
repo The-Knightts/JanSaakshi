@@ -78,7 +78,7 @@ export default function AdminPage() {
                 <div className="card">
                     <h2 className="card-title" style={{ marginBottom: '10px' }}>Upload Meeting PDF</h2>
                     <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
-                        City: <strong>{city}</strong>. The system will extract project details automatically.
+                        City: <strong>{city}</strong>. Extracts meeting details + project data automatically.
                     </p>
                     <label className="upload-zone" style={{ display: 'block' }}>
                         <input type="file" accept=".pdf" onChange={handleUpload} disabled={uploading} style={{ display: 'none' }} />
@@ -98,9 +98,42 @@ export default function AdminPage() {
                         </div>
                     )}
 
+                    {/* Extracted Meeting Details */}
+                    {uploadResult?.meeting && Object.keys(uploadResult.meeting).length > 0 && (
+                        <div style={{ marginTop: '14px', padding: '14px', borderRadius: '8px', background: 'var(--primary-light)', border: '1px solid #bfdbfe' }}>
+                            <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: 'var(--primary)' }}>
+                                📋 Meeting Details Extracted
+                            </h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                {uploadResult.meeting.meet_date && (
+                                    <div><strong>Date:</strong> {uploadResult.meeting.meet_date}</div>
+                                )}
+                                {uploadResult.meeting.meet_type && (
+                                    <div><strong>Type:</strong> {uploadResult.meeting.meet_type.replace('_', ' ')}</div>
+                                )}
+                                {uploadResult.meeting.ward_no && (
+                                    <div><strong>Ward:</strong> {uploadResult.meeting.ward_no}{uploadResult.meeting.ward_name ? ` — ${uploadResult.meeting.ward_name}` : ''}</div>
+                                )}
+                                {uploadResult.meeting.venue && (
+                                    <div><strong>Venue:</strong> {uploadResult.meeting.venue}</div>
+                                )}
+                            </div>
+                            {uploadResult.meeting.objective && (
+                                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '8px', lineHeight: 1.5 }}>
+                                    <strong>Objective:</strong> {uploadResult.meeting.objective}
+                                </p>
+                            )}
+                            {uploadResult.meeting.attendees && (
+                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                    <strong>Attendees:</strong> {uploadResult.meeting.attendees}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     {uploadResult?.projects?.length > 0 && (
                         <div style={{ marginTop: '14px' }}>
-                            <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Extracted ({uploadResult.projects.length})</h3>
+                            <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>Projects Extracted ({uploadResult.projects.length})</h3>
                             {uploadResult.projects.map((p, i) => (
                                 <div key={i} className="project-item">
                                     <div>

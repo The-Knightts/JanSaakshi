@@ -4,11 +4,12 @@ import os
 import json
 import sqlite3
 import secrets
+from datetime import datetime
 from functools import wraps
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
-from utils.pdf_processor import extract_projects_from_pdf, generate_project_summary
+from utils.pdf_processor import extract_data_from_pdf, extract_projects_from_pdf, generate_project_summary
 from utils.context_generator import extract_keywords_from_query, add_context_to_results
 from utils.database import (
     init_database, get_city_id, get_all_cities,
@@ -163,7 +164,11 @@ def admin_upload():
 
         city_name = request.form.get("city") or "mumbai"
         city_id = get_city_id(city_name)
-        projects = extract_projects_from_pdf(filepath)
+
+        # Extract both meeting metadata and projects
+        result = extract_data_from_pdf(filepath)
+        meeting_data = result["meeting"]
+        projects = result["projects"]
 
         for p in projects:
             if not p.get("summary"):
@@ -172,20 +177,34 @@ def admin_upload():
         inserted = insert_projects(projects, city_id=city_id)
         elapsed = time.perf_counter() - start
 
-        # Create meeting record
+        # Insert meeting with extracted metadata
         conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
         conn.execute("""
-            INSERT INTO meetings (city_id, ward_no, meet_date, meet_type, source_pdf, project_count)
-            VALUES (?, ?, date('now'), 'ward_committee', ?, ?)
-        """, (city_id, projects[0].get("ward_no") if projects else None, filename, len(projects)))
+            INSERT INTO meetings (city_id, ward_no, ward_name, meet_date, meet_type,
+                venue, objective, attendees, projects_discussed, source_pdf, project_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            city_id,
+            meeting_data.get("ward_no") or (projects[0].get("ward_no") if projects else None),
+            meeting_data.get("ward_name") or (projects[0].get("ward_name") if projects else None),
+            meeting_data.get("meet_date") or datetime.now().strftime("%Y-%m-%d"),
+            meeting_data.get("meet_type") or "ward_committee",
+            meeting_data.get("venue"),
+            meeting_data.get("objective"),
+            meeting_data.get("attendees"),
+            meeting_data.get("projects_discussed"),
+            filename,
+            len(projects),
+        ))
         conn.commit()
         conn.close()
 
         return jsonify({
             "success": True,
-            "message": f"Extracted {len(projects)} projects in {elapsed:.1f}s",
+            "message": f"Extracted {len(projects)} projects + meeting details in {elapsed:.1f}s",
             "projects_extracted": len(projects),
             "projects_inserted": inserted,
+            "meeting": meeting_data,
             "projects": projects,
         })
     except Exception as e:
