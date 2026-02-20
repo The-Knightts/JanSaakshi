@@ -22,7 +22,7 @@ type WardStat = {
 
 type StatsIndex = Record<number, WardStat>;
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '';
+import { API_BASE } from '@/lib/config';
 
 export default function WardMap() {
 
@@ -112,10 +112,10 @@ export default function WardMap() {
         const wardNumber = Number((props as any)?.wardNumber);
 
         return {
-            fillColor: "#ffffff",
-            fillOpacity: 0.25,
-            color: "#000000",
-            weight: selected === wardNumber ? 2 : 1,
+            fillColor: "transparent",
+            fillOpacity: 0,
+            color: "#64748b",
+            weight: selected === wardNumber ? 3 : 1.2,
         } as L.PathOptions;
 
     }, [selected]);
@@ -297,6 +297,22 @@ export default function WardMap() {
 
                 <ZoomControl position="bottomright" />
             </MapContainer>
+
+            <style>{`
+                .ward-number-clean {
+                    background: none !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    font-weight: 800 !important;
+                    font-size: 11px !important;
+                    color: #4b5563 !important;
+                    text-shadow: 0 0 2px #fff !important;
+                    pointer-events: none !important;
+                }
+                .ward-number-clean::before {
+                    display: none !important;
+                }
+            `}</style>
         </div>
     );
 }

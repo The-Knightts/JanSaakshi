@@ -1,9 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, useEffect, ReactNode } from "react";
 import { gsap } from "gsap";
 import { GoArrowUpRight } from "react-icons/go";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import "./CardNav.css";
 
 interface CardNavLink {
@@ -47,6 +48,16 @@ const CardNav = ({
     const navRef = useRef<HTMLElement>(null);
     const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
     const tlRef = useRef<gsap.core.Timeline | null>(null);
+    const pathname = usePathname();
+
+    // Close menu on route change
+    useEffect(() => {
+        setIsHamburgerOpen(false);
+        setIsExpanded(false);
+        if (tlRef.current) {
+            tlRef.current.progress(0).pause();
+        }
+    }, [pathname]);
 
     const calculateHeight = () => {
         const navEl = navRef.current;
