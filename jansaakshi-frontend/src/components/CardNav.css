@@ -1,26 +1,28 @@
 .card-nav-container {
     position: fixed;
-    top: 1em;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 90%;
-    max-width: 800px;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
     z-index: 9999;
     box-sizing: border-box;
+    display: flex;
+    justify-content: center;
 }
 
 .card-nav {
     display: block;
     height: 52px;
+    width: 100%;
+    max-width: 1300px;
     padding: 0;
     background-color: #ffffff;
-    border: 1px solid rgba(0, 85, 255, 0.1);
-    border-radius: 0.75rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08), 0 0 8px rgba(0, 85, 255, 0.05);
+    border: 1px solid rgba(224, 186, 186, 0.05);
+    border-radius: 1.5rem;
     position: relative;
     overflow: hidden;
     will-change: height;
     user-select: none;
+    box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
 }
 
 .card-nav-top {
@@ -32,44 +34,28 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.4rem 0.4rem 0.4rem 1rem;
+    padding: 0 1rem;
     z-index: 2;
 }
 
 .hamburger-menu {
-    height: 100%;
+    height: 40px;
+    width: 40px;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
     cursor: pointer;
-    gap: 5px;
+    gap: 8px;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
 }
 
-.hamburger-menu:hover .hamburger-line {
-    opacity: 0.75;
-}
-
 .hamburger-line {
-    width: 24px;
+    width: 22px;
     height: 2px;
-    background-color: currentColor;
-    transition:
-        transform 0.25s ease,
-        opacity 0.2s ease,
-        margin 0.3s ease;
-    transform-origin: 50% 50%;
-    pointer-events: none;
-}
-
-.hamburger-menu.open .hamburger-line:first-child {
-    transform: translateY(4px) rotate(45deg);
-}
-
-.hamburger-menu.open .hamburger-line:last-child {
-    transform: translateY(-4px) rotate(-45deg);
+    background-color: #0f172a;
+    transition: transform 0.25s ease, opacity 0.2s ease;
 }
 
 .logo-container {
@@ -83,43 +69,42 @@
 }
 
 .logo-container .logo-text {
-    font-size: 16px;
-    font-weight: 700;
+    font-size: 18px;
+    font-weight: 800;
     color: #0055ff;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 8px;
     text-decoration: none;
-    user-select: none;
 }
 
 .logo-container .logo-text svg {
-    width: 20px;
-    height: 20px;
-}
-
-.logo {
-    height: 28px;
+    width: 24px;
+    height: 24px;
+    background: #2563eb;
+    color: white;
+    padding: 3px;
+    border-radius: 6px;
 }
 
 .card-nav-cta-button {
-    background-color: #0055ff;
+    background-color: #2563eb;
     color: #ffffff;
     border: none;
-    border-radius: calc(0.75rem - 0.35rem);
-    padding: 0 0.85rem;
-    height: 100%;
-    font-weight: 600;
+    border-radius: 1rem;
+    height: 32px;
+    padding: 0 1rem;
+    font-weight: 800;
     cursor: pointer;
-    transition: background-color 0.3s ease;
-    align-items: center;
-    font-family: inherit;
-    font-size: 13px;
-    user-select: none;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.1em;
 }
 
 .card-nav-cta-button:hover {
-    background-color: #0044cc;
+    background-color: #1d4ed8;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
 }
 
 .card-nav-content {
@@ -128,9 +113,9 @@
     right: 0;
     top: 52px;
     bottom: 0;
-    padding: 0.4rem;
+    padding: 0.5rem;
     display: flex;
-    align-items: flex-end;
+    align-items: stretch;
     gap: 8px;
     visibility: hidden;
     pointer-events: none;
@@ -150,33 +135,36 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    padding: 12px 14px;
-    gap: 4px;
+    padding: 6px 8px;
+    gap: 2px;
+    justify-content: flex-start;
     user-select: none;
 }
 
 .nav-card-label {
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: -0.2px;
+    font-weight: 800;
+    font-size: 11px;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
-    opacity: 0.7;
+    margin-bottom: 3px;
+    opacity: 0.9;
 }
 
 .nav-card-links {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 
 .nav-card-link {
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
     text-decoration: none;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s ease;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     color: inherit;
 }
 
@@ -185,8 +173,8 @@
 }
 
 .nav-card-link-icon {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
 }
 

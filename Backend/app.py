@@ -20,6 +20,7 @@ from utils.database import (
     insert_complaint, get_complaints_for_user, get_all_complaints,
     update_complaint_status, add_follow_up, remove_follow_up,
     get_followed_projects, DATABASE_PATH,
+    insert_review, get_reviews_for_contractor, get_contractor_rating, has_user_reviewed,
 )
 
 load_dotenv()
@@ -44,7 +45,7 @@ def allowed_file(fn):
 
 
 def get_current_user():
-    token = request.headers.get("Authorization", "").replace("Bearer ", "")
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
     if not token:
         token = request.cookies.get("token", "")
     if token and token in _sessions:
@@ -69,6 +70,18 @@ def require_admin(f):
         user = get_current_user()
         if not user or user.get("role") != "admin":
             return jsonify({"error": "Admin access required"}), 403
+        g.user = user
+        return f(*args, **kwargs)
+    return decorated
+
+
+def require_authorized(f):
+    """Allow admins and authorized_users to proceed."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        user = get_current_user()
+        if not user or user.get("role") not in ("admin", "authorized_user"):
+            return jsonify({"error": "Authorized user access required"}), 403
         g.user = user
         return f(*args, **kwargs)
     return decorated
@@ -131,7 +144,7 @@ def get_me():
 
 @app.route("/api/auth/logout", methods=["POST"])
 def logout():
-    token = request.headers.get("Authorization", "").replace("Bearer ", "") or request.cookies.get("token", "")
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip() or request.cookies.get("token", "")
     _sessions.pop(token, None)
     resp = jsonify({"success": True})
     resp.delete_cookie("token")
@@ -574,6 +587,76 @@ def api_contractor_projects():
     """, params).fetchall()
     conn.close()
     return jsonify({"projects": [dict(r) for r in projects_rows], "count": len(projects_rows)})
+
+
+# ==================== CONTRACTOR REVIEWS ====================
+
+
+@app.route("/api/contractors/reviews")
+def api_get_contractor_reviews():
+    """Get all reviews + aggregate rating for a contractor. ?name= required."""
+    contractor_name = request.args.get("name", "").strip()
+    if not contractor_name:
+        return jsonify({"error": "name parameter required"}), 400
+    reviews = get_reviews_for_contractor(contractor_name)
+    rating_info = get_contractor_rating(contractor_name)
+    # Check if current user already reviewed
+    current_user = get_current_user()
+    user_review = None
+    if current_user:
+        user_review = has_user_reviewed(contractor_name, current_user["id"])
+    return jsonify({
+        "reviews": reviews,
+        "avg_rating": rating_info["avg_rating"],
+        "review_count": rating_info["review_count"],
+        "user_review": user_review,
+    })
+
+
+@app.route("/api/contractors/reviews", methods=["POST"])
+@require_authorized
+def api_submit_contractor_review():
+    """Submit or update a review. Only admins and authorized_users allowed."""
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "JSON body required"}), 400
+    contractor_name = (data.get("contractor_name") or "").strip()
+    rating = data.get("rating")
+    if not contractor_name:
+        return jsonify({"error": "contractor_name required"}), 400
+    if not isinstance(rating, int) or rating < 1 or rating > 5:
+        return jsonify({"error": "rating must be integer 1–5"}), 400
+    rid = insert_review(
+        contractor_name=contractor_name,
+        reviewer_id=g.user["id"],
+        rating=rating,
+        title=data.get("title"),
+        body=data.get("body"),
+    )
+    if rid is None:
+        return jsonify({"error": "Could not save review"}), 500
+    return jsonify({"success": True, "review_id": rid})
+
+
+@app.route("/api/admin/promote-user", methods=["POST"])
+@require_admin
+def api_promote_user():
+    """Admin-only: set a user's role to authorized_user or user."""
+    data = request.get_json()
+    username = (data or {}).get("username", "").strip()
+    role = (data or {}).get("role", "authorized_user")
+    if not username:
+        return jsonify({"error": "username required"}), 400
+    if role not in ("user", "authorized_user", "admin"):
+        return jsonify({"error": "invalid role"}), 400
+    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
+    conn.execute("UPDATE users SET role=? WHERE username=?", (role, username))
+    conn.commit()
+    affected = conn.execute("SELECT changes()").fetchone()[0]
+    conn.close()
+    if not affected:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify({"success": True, "username": username, "new_role": role})
 
 
 # ==================== CITIES ====================

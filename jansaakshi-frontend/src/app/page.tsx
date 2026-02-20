@@ -3,9 +3,6 @@
 import { useState, useEffect, useCallback, FormEvent } from 'react';
 import { useApp } from '@/context/AppContext';
 import dynamic from 'next/dynamic';
-import { Badge } from '@/components/ui/Badge';
-import { Button } from '@/components/ui/Button';
-import { ArrowRight } from 'lucide-react';
 
 const WardMap = dynamic(() => import('@/components/WardMap'), {
   ssr: false,
@@ -29,6 +26,8 @@ export default function HomePage() {
   const [delayed, setDelayed] = useState<any[]>([]);
   const [userWardProjects, setUserWardProjects] = useState<any[]>([]);
   const [connected, setConnected] = useState(false);
+  const [selectedWard, setSelectedWard] = useState<any>(null);
+  const [wardProjects, setWardProjects] = useState<any[]>([]);
 
   // Smart search state
   const [query, setQuery] = useState('');
@@ -77,60 +76,31 @@ export default function HomePage() {
     setSearching(false);
   };
 
+  const handleWardClick = async (wardNumber: string, wardName: string) => {
+    setSelectedWard({ number: wardNumber, name: wardName });
+
+    try {
+      const res = await apiFetch(`/api/projects/ward/${wardNumber}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWardProjects(data.projects || []);
+      }
+    } catch { }
+  };
+
 
   const statusBadge = (s: string) => `status-badge status-${s || 'pending'}`;
   const cityLabel = city === 'delhi' ? 'Delhi' : 'Mumbai';
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      <div className="flex flex-col gap-8 w-full max-w-[1400px] mx-auto pb-20">
-        {/* Hero Section with Mumbai Touch */}
-        <section className="relative px-8 pt-10 pb-20 md:pt-14 md:pb-32 rounded-[3rem] overflow-hidden bg-[#0A1128] text-white shadow-2xl">
-          {/* Animated Sea Waves Pattern */}
-          <div className="absolute inset-0 opacity-10 sea-pattern animate-[pulse_8s_infinite]" />
-
-          {/* Mumbai Sunset Glow */}
-          <div className="absolute top-[-10%] right-[-10%] w-[600px] h-[600px] bg-orange-600/20 rounded-full blur-[150px] animate-pulse" />
-          <div className="absolute bottom-[-20%] left-[-10%] w-[400px] h-[400px] bg-blue-600/20 rounded-full blur-[120px]" />
-
-          <div className="relative z-10 max-w-4xl">
-            <div className="flex items-center gap-3 mb-8">
-              <Badge className="bg-primary/20 text-blue-300 border-none px-4 py-1.5 backdrop-blur-xl font-bold uppercase tracking-widest text-[10px]">
-                Maximum City Dashboard
-              </Badge>
-              <div className="h-1 w-12 bg-gradient-to-r from-primary to-transparent rounded-full" />
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">आमची मुंबई • Our City</span>
-            </div>
-
-            <h1 className="text-5xl md:text-8xl font-black tracking-[ -0.05em] mb-8 leading-[0.95]">
-              Legacy of <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-amber-200">
-                Maximum Progress.
-              </span>
-            </h1>
-
-            <p className="text-xl md:text-2xl text-slate-300 max-w-2xl mb-12 leading-relaxed font-light">
-              Bringing transparency to the <span className="text-white font-semibold">Gateway of India&apos;s</span> future. Track infra, report issues, and build the dream.
-            </p>
-
-            <div className="flex flex-wrap gap-5 items-center">
-              <Button size="lg" className="bg-primary hover:bg-white hover:text-primary h-16 px-10 rounded-2xl font-black text-lg transition-all shadow-2xl shadow-primary/40 group">
-                Explore Live Map
-                <ArrowRight className="ml-2 group-hover:translate-x-2 transition-transform" />
-              </Button>
-              <Button size="lg" variant="outline" className="border-white/10 hover:bg-white/5 h-16 px-10 rounded-2xl font-black text-lg backdrop-blur-md">
-                Public Grievances
-              </Button>
-            </div>
-          </div>
-        </section>
-
-        <div className="flex flex-col gap-8">
-          <div className="card" style={{ padding: '20px 24px', background: 'linear-gradient(135deg, var(--primary-light), var(--bg-card))', borderColor: '#bfdbfe' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '40px' }}>
+      <div className="flex flex-col gap-12 w-full max-w-[1400px] mx-auto pb-32 pt-16">
+        <div className="flex flex-col gap-32">
+          <div className="card" style={{ padding: '24px 32px', background: 'linear-gradient(135deg, var(--primary-light), var(--bg-card))', borderColor: '#bfdbfe' }}>
             <h2 style={{ fontSize: '18px', fontWeight: 700, marginBottom: '4px', color: 'var(--text)' }}>
               Ask about any project
             </h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '14px' }}>
+            <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
               Search by project name, ward, area, or ask a question in natural language
             </p>
             <form onSubmit={handleSearch} style={{ display: 'flex', gap: '8px' }}>
@@ -139,16 +109,16 @@ export default function HomePage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={`e.g. "Charkop water pipeline" or "delayed projects in Kandivali"`}
-                style={{ flex: 1, fontSize: '14px', padding: '10px 14px' }}
+                style={{ flex: 1, fontSize: '15px', padding: '10px 16px' }}
               />
-              <button type="submit" className="btn btn-primary" disabled={searching} style={{ whiteSpace: 'nowrap', padding: '10px 20px' }}>
+              <button type="submit" className="btn btn-primary" disabled={searching} style={{ whiteSpace: 'nowrap', padding: '10px 24px', fontSize: '15px' }}>
                 {searching ? 'Searching...' : 'Search'}
               </button>
             </form>
 
             {/* Quick suggestion chips */}
             {!searchResult && (
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '10px' }}>
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '16px' }}>
                 {[
                   city === 'mumbai' ? 'Kandivali road projects' : 'Chandni Chowk redesign',
                   'Delayed projects',
@@ -170,7 +140,7 @@ export default function HomePage() {
 
           {/* Search Results */}
           {searchResult && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
               {searchResult.error ? (
                 <div className="card" style={{ background: 'var(--red-bg)', borderColor: '#fecaca' }}>
                   <p style={{ color: 'var(--red)', fontSize: '14px', fontWeight: 500 }}>{searchResult.error}</p>
@@ -298,16 +268,16 @@ export default function HomePage() {
           )}
 
           {/* Map */}
-          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {/* <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 className="card-title">Ward Map — {cityLabel}</h2>
               <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Click a ward to see live stats</span>
             </div>
             <WardMap />
-          </div>
+          </div> */}
 
           {/* Delayed */}
-          <div className="card">
+          {/* <div className="card">
             <div className="card-header">
               <h2 className="card-title">Most Delayed Projects</h2>
               <a href="/projects?status=delayed" className="btn btn-outline" style={{ fontSize: '12px', padding: '5px 10px' }}>View All</a>
@@ -326,6 +296,102 @@ export default function HomePage() {
                 </div>
               </div>
             ))}
+          </div> */}
+
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "20px" }}>
+
+            {/* PREMIUM MAP CONTAINER */}
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div
+                style={{
+                  padding: "16px 20px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <h2 className="card-title">Infrastructure Map — {cityLabel}</h2>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  Click ward to view projects
+                </span>
+              </div>
+
+              <div style={{ minHeight: "600px", background: "#f8fafc" }}>
+                <WardMap city={city as any} onWardClick={handleWardClick} />
+              </div>
+            </div>
+
+            {/* PREMIUM ALERT CENTER */}
+            <div className="card" style={{ display: "flex", flexDirection: "column" }}>
+
+              <div
+                style={{
+                  padding: "16px 20px",
+                  borderBottom: "1px solid var(--border)",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <h2 className="card-title">Alert Center</h2>
+              </div>
+
+              <div style={{ flex: 1 }}>
+
+                {selectedWard ? (
+                  wardProjects.length === 0 ? (
+                    <p style={{ padding: "20px", fontSize: "14px", color: "var(--text-muted)" }}>
+                      No projects found for Ward {selectedWard.number}
+                    </p>
+                  ) : (
+                    wardProjects.map((p, i) => (
+                      <div key={i} className="project-item">
+                        <div>
+                          <div className="project-name">{p.project_name}</div>
+                          {p.summary && (
+                            <div className="project-meta">{p.summary}</div>
+                          )}
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <span className={statusBadge(p.status)}>{p.status}</span>
+                          {p.delay_days > 0 && (
+                            <div style={{ fontSize: "12px", color: "var(--red)", marginTop: "4px" }}>
+                              {p.delay_days}d delayed
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )
+                ) : delayed.length === 0 ? (
+                  <p style={{ padding: "20px", fontSize: "14px", color: "var(--text-muted)" }}>
+                    Click on a ward to view live delayed project alerts.
+                  </p>
+                ) : (
+                  delayed.map((p, i) => (
+                    <div key={i} className="project-item">
+                      <div>
+                        <div className="project-name">{p.project_name}</div>
+                        <div className="project-meta">
+                          Ward {p.ward_no} · {p.ward_name}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <span className={statusBadge(p.status)}>{p.status}</span>
+                        {p.delay_days > 0 && (
+                          <div style={{ fontSize: "12px", color: "var(--red)", marginTop: "4px" }}>
+                            {p.delay_days}d overdue
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+
+              </div>
+            </div>
+
           </div>
         </div>
       </div>

@@ -10,6 +10,10 @@ export default function AdminPage() {
     const [uploadResult, setUploadResult] = useState(null);
     const [complaints, setComplaints] = useState([]);
     const [tab, setTab] = useState('upload');
+    const [promoteUsername, setPromoteUsername] = useState('');
+    const [promoteRole, setPromoteRole] = useState('authorized_user');
+    const [promoteResult, setPromoteResult] = useState<{ ok: boolean; text: string } | null>(null);
+    const [promoting, setPromoting] = useState(false);
 
     const loadComplaints = useCallback(async () => {
         try {
@@ -17,6 +21,28 @@ export default function AdminPage() {
             if (res.ok) setComplaints((await res.json()).complaints || []);
         } catch { }
     }, [apiFetch]);
+
+    const handlePromote = async () => {
+        if (!promoteUsername.trim()) return;
+        setPromoting(true);
+        setPromoteResult(null);
+        try {
+            const res = await apiFetch('/api/admin/promote-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: promoteUsername.trim(), role: promoteRole }),
+            });
+            const d = await res.json();
+            if (d.success) {
+                setPromoteResult({ ok: true, text: `@${d.username} is now "${d.new_role}"` });
+                setPromoteUsername('');
+            } else {
+                setPromoteResult({ ok: false, text: d.error || 'Failed.' });
+            }
+        } catch { setPromoteResult({ ok: false, text: 'Network error.' }); }
+        setPromoting(false);
+    };
+
 
     useEffect(() => { if (isAdmin && tab === 'complaints') loadComplaints(); }, [isAdmin, tab, loadComplaints]);
 
@@ -69,9 +95,10 @@ export default function AdminPage() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Manage PDFs and complaints for {city}</p>
             </div>
 
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                 <button className={`btn ${tab === 'upload' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('upload')}>PDF Upload</button>
                 <button className={`btn ${tab === 'complaints' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('complaints')}>Complaints</button>
+                <button className={`btn ${tab === 'users' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('users')}>👤 Manage Users</button>
             </div>
 
             {tab === 'upload' && (
@@ -175,6 +202,50 @@ export default function AdminPage() {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+            {tab === 'users' && (
+                <div className="card">
+                    <h2 className="card-title" style={{ marginBottom: '6px' }}>Manage User Roles</h2>
+                    <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                        Promote a regular user to <strong>authorized_user</strong> so they can write contractor reviews.
+                        Admins can always review contractors.
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxWidth: 440 }}>
+                        <div>
+                            <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Username</label>
+                            <input
+                                className="input"
+                                value={promoteUsername}
+                                onChange={e => setPromoteUsername(e.target.value)}
+                                placeholder="Enter exact username…"
+                            />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>New Role</label>
+                            <select className="input" value={promoteRole} onChange={e => setPromoteRole(e.target.value)}>
+                                <option value="authorized_user">authorized_user (can write reviews)</option>
+                                <option value="user">user (standard)</option>
+                                <option value="admin">admin</option>
+                            </select>
+                        </div>
+                        {promoteResult && (
+                            <div style={{
+                                padding: '8px 12px', borderRadius: '8px', fontSize: '13px',
+                                background: promoteResult.ok ? 'var(--green-bg)' : 'var(--red-bg)',
+                                color: promoteResult.ok ? 'var(--green)' : 'var(--red)',
+                                border: `1px solid ${promoteResult.ok ? '#bbf7d0' : '#fecaca'}`,
+                            }}>{promoteResult.text}</div>
+                        )}
+                        <button
+                            className="btn btn-primary"
+                            style={{ alignSelf: 'flex-start' }}
+                            onClick={handlePromote}
+                            disabled={promoting || !promoteUsername.trim()}
+                        >
+                            {promoting ? 'Updating…' : 'Apply Role'}
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

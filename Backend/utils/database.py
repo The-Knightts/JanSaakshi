@@ -138,6 +138,26 @@ def init_database():
         )
     """)
 
+    # Contractor Reviews
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS contractor_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            contractor_name TEXT NOT NULL,
+            reviewer_id INTEGER NOT NULL,
+            rating INTEGER NOT NULL CHECK(rating BETWEEN 1 AND 5),
+            title TEXT,
+            body TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (reviewer_id) REFERENCES users(id),
+            UNIQUE(contractor_name, reviewer_id)
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS idx_review_contractor ON contractor_reviews(contractor_name)")
+
+    # Seed cities
+    c.execute("INSERT OR IGNORE INTO city (city_name, state) VALUES ('mumbai', 'Maharashtra')")
+    c.execute("INSERT OR IGNORE INTO city (city_name, state) VALUES ('delhi', 'Delhi')")
+
     conn.commit()
     conn.close()
     print("Database initialized")
@@ -456,3 +476,64 @@ def get_followed_projects(user_id):
     """, (user_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ==================== CONTRACTOR REVIEWS ====================
+
+
+def insert_review(contractor_name, reviewer_id, rating, title=None, body=None):
+    """Insert or replace a review for a contractor by a user. Returns review id or None on error."""
+    conn = get_db()
+    try:
+        conn.execute("""
+            INSERT INTO contractor_reviews (contractor_name, reviewer_id, rating, title, body)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(contractor_name, reviewer_id) DO UPDATE SET
+                rating=excluded.rating, title=excluded.title,
+                body=excluded.body, created_at=CURRENT_TIMESTAMP
+        """, (contractor_name, reviewer_id, rating, title, body))
+        conn.commit()
+        rid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+        return rid
+    except Exception as e:
+        conn.close()
+        print(f"Review insert error: {e}")
+        return None
+
+
+def get_reviews_for_contractor(contractor_name):
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT cr.*, u.display_name, u.username
+        FROM contractor_reviews cr
+        JOIN users u ON cr.reviewer_id = u.id
+        WHERE LOWER(cr.contractor_name) = LOWER(?)
+        ORDER BY cr.created_at DESC
+    """, (contractor_name,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_contractor_rating(contractor_name):
+    """Returns dict with avg_rating and review_count."""
+    conn = get_db()
+    row = conn.execute("""
+        SELECT AVG(rating) as avg_rating, COUNT(*) as review_count
+        FROM contractor_reviews WHERE LOWER(contractor_name) = LOWER(?)
+    """, (contractor_name,)).fetchone()
+    conn.close()
+    if row:
+        return {"avg_rating": round(row["avg_rating"] or 0, 1), "review_count": row["review_count"]}
+    return {"avg_rating": 0, "review_count": 0}
+
+
+def has_user_reviewed(contractor_name, reviewer_id):
+    conn = get_db()
+    row = conn.execute("""
+        SELECT id, rating FROM contractor_reviews
+        WHERE LOWER(contractor_name)=LOWER(?) AND reviewer_id=?
+    """, (contractor_name, reviewer_id)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+

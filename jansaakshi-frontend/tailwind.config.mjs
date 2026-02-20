@@ -12,6 +12,10 @@ export default {
                     DEFAULT: '#0055ff',
                 },
             },
+            fontFamily: {
+                outfit: ['var(--font-outfit)', 'sans-serif'],
+                noto: ['var(--font-noto-devenagari)', 'sans-serif'],
+            },
         },
     },
     plugins: [],

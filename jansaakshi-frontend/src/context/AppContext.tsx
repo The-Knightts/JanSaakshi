@@ -16,6 +16,7 @@ interface AppContextValue {
     logout: () => Promise<void>;
     apiFetch: (url: string, options?: RequestInit) => Promise<Response>;
     isAdmin: boolean;
+    isAuthorizedUser: boolean;
     API: string;
 }
 
@@ -136,6 +137,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             user, city, setCity, token, loading,
             login, signup, logout, apiFetch,
             isAdmin: user?.role === 'admin',
+            isAuthorizedUser: user?.role === 'admin' || user?.role === 'authorized_user',
             API,
         }}>
             {children}

@@ -33,7 +33,26 @@ interface Project {
     location_details?: string;
 }
 
-/* ─── small helpers ─────────────────────────────────────────── */
+interface Review {
+    id: number;
+    contractor_name: string;
+    reviewer_id: number;
+    rating: number;
+    title?: string;
+    body?: string;
+    display_name: string;
+    username: string;
+    created_at: string;
+}
+
+interface ReviewData {
+    reviews: Review[];
+    avg_rating: number;
+    review_count: number;
+    user_review: { id: number; rating: number } | null;
+}
+
+/* ─── Helpers ───────────────────────────────────────────────── */
 
 function badgeStyle(color: string, bg: string): React.CSSProperties {
     return {
@@ -124,21 +143,318 @@ function StatusBadge({ status }: { status: string }) {
     );
 }
 
-/* ─── ProjectPanel – self-contained, fetches its own data ───── */
+/* ─── StarRating ─────────────────────────────────────────────── */
+
+function StarRating({ value, onChange, readOnly = false, size = 22 }: {
+    value: number;
+    onChange?: (v: number) => void;
+    readOnly?: boolean;
+    size?: number;
+}) {
+    const [hovered, setHovered] = useState(0);
+    const display = hovered || value;
+    return (
+        <div style={{ display: 'flex', gap: 2 }}>
+            {[1, 2, 3, 4, 5].map(star => (
+                <span
+                    key={star}
+                    onClick={() => !readOnly && onChange?.(star)}
+                    onMouseEnter={() => !readOnly && setHovered(star)}
+                    onMouseLeave={() => !readOnly && setHovered(0)}
+                    style={{
+                        fontSize: size, cursor: readOnly ? 'default' : 'pointer',
+                        color: star <= display ? '#f59e0b' : '#e2e8f0',
+                        transition: 'color .1s',
+                        userSelect: 'none',
+                    }}
+                >★</span>
+            ))}
+        </div>
+    );
+}
+
+/* ─── RatingBar — shows distribution ────────────────────────── */
+
+function RatingDistribution({ reviews }: { reviews: Review[] }) {
+    const counts = [5, 4, 3, 2, 1].map(star => ({
+        star,
+        count: reviews.filter(r => r.rating === star).length,
+    }));
+    const max = Math.max(...counts.map(c => c.count), 1);
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 140 }}>
+            {counts.map(({ star, count }) => (
+                <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 11, color: '#64748b', width: 8 }}>{star}</span>
+                    <span style={{ fontSize: 12, color: '#f59e0b' }}>★</span>
+                    <div style={{ flex: 1, height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{
+                            height: '100%', borderRadius: 3,
+                            background: '#f59e0b',
+                            width: `${(count / max) * 100}%`,
+                            transition: 'width .4s ease',
+                        }} />
+                    </div>
+                    <span style={{ fontSize: 11, color: '#94a3b8', width: 16, textAlign: 'right' }}>{count}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+/* ─── ReviewCard ─────────────────────────────────────────────── */
+
+function ReviewCard({ review }: { review: Review }) {
+    const initials = (review.display_name || review.username || '?').slice(0, 2).toUpperCase();
+    return (
+        <div style={{
+            background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+            padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 6,
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{
+                    width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                    background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: '#fff', fontWeight: 700, fontSize: 12,
+                }}>{initials}</div>
+                <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>
+                        {review.display_name || review.username}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                        {review.created_at ? review.created_at.slice(0, 10) : ''}
+                    </div>
+                </div>
+                <StarRating value={review.rating} readOnly size={16} />
+            </div>
+            {review.title && (
+                <div style={{ fontWeight: 600, fontSize: 13, color: '#1e293b' }}>{review.title}</div>
+            )}
+            {review.body && (
+                <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, margin: 0 }}>{review.body}</p>
+            )}
+        </div>
+    );
+}
+
+/* ─── ReviewPanel ────────────────────────────────────────────── */
+
+function ReviewPanel({ contractorName, apiFetch, isAuthorizedUser, user }: {
+    contractorName: string;
+    apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
+    isAuthorizedUser: boolean;
+    user: any;
+}) {
+    const [data, setData] = useState<ReviewData | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [showForm, setShowForm] = useState(false);
+    const [form, setForm] = useState({ rating: 0, title: '', body: '' });
+    const [submitMsg, setSubmitMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const res = await apiFetch(`/api/contractors/reviews?name=${encodeURIComponent(contractorName)}`);
+            if (res.ok) {
+                const d = await res.json();
+                setData(d);
+                if (d.user_review) {
+                    setForm(prev => ({ ...prev, rating: d.user_review.rating }));
+                }
+            }
+        } finally {
+            setLoading(false);
+        }
+    }, [contractorName, apiFetch]);
+
+    useEffect(() => { load(); }, [load]);
+
+    const handleSubmit = async () => {
+        if (form.rating < 1) { setSubmitMsg({ ok: false, text: 'Please select a star rating.' }); return; }
+        setSubmitting(true);
+        setSubmitMsg(null);
+        try {
+            const res = await apiFetch('/api/contractors/reviews', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contractor_name: contractorName,
+                    rating: form.rating,
+                    title: form.title || undefined,
+                    body: form.body || undefined,
+                }),
+            });
+            const d = await res.json();
+            if (d.success) {
+                setSubmitMsg({ ok: true, text: 'Review submitted! Thank you.' });
+                setShowForm(false);
+                load();
+            } else {
+                setSubmitMsg({ ok: false, text: d.error || 'Submission failed.' });
+            }
+        } catch {
+            setSubmitMsg({ ok: false, text: 'Network error.' });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    if (loading) return (
+        <div style={{ padding: '20px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+            Loading reviews…
+        </div>
+    );
+
+    const reviews = data?.reviews ?? [];
+    const avgRating = data?.avg_rating ?? 0;
+    const reviewCount = data?.review_count ?? 0;
+    const alreadyReviewed = !!data?.user_review;
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 8 }}>
+            {/* ── Header row ── */}
+            <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                flexWrap: 'wrap', gap: 12,
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    {/* Big score */}
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 40, fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>
+                            {avgRating > 0 ? avgRating.toFixed(1) : '—'}
+                        </div>
+                        <StarRating value={Math.round(avgRating)} readOnly size={18} />
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                            {reviewCount} review{reviewCount !== 1 ? 's' : ''}
+                        </div>
+                    </div>
+                    {reviews.length > 0 && <RatingDistribution reviews={reviews} />}
+                </div>
+
+                {/* Write / Edit review button */}
+                {isAuthorizedUser && (
+                    <button
+                        onClick={() => { setShowForm(f => !f); setSubmitMsg(null); }}
+                        style={{
+                            padding: '9px 18px', borderRadius: 8, border: '1.5px solid #2563eb',
+                            background: showForm ? '#eff6ff' : '#2563eb', cursor: 'pointer',
+                            color: showForm ? '#2563eb' : '#fff', fontWeight: 600, fontSize: 13,
+                            transition: 'all .15s',
+                        }}
+                    >
+                        {showForm ? 'Cancel' : alreadyReviewed ? '✏ Edit Your Review' : '★ Write a Review'}
+                    </button>
+                )}
+                {!isAuthorizedUser && !user && (
+                    <div style={{
+                        fontSize: 12, color: '#94a3b8', padding: '8px 14px',
+                        background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0',
+                    }}>
+                        🔒 Log in as an authorized reviewer to rate this contractor
+                    </div>
+                )}
+                {!isAuthorizedUser && user && (
+                    <div style={{
+                        fontSize: 12, color: '#94a3b8', padding: '8px 14px',
+                        background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0',
+                    }}>
+                        🔒 Only authorized users & admins can submit reviews
+                    </div>
+                )}
+            </div>
+
+            {/* ── Review form ── */}
+            {showForm && isAuthorizedUser && (
+                <div style={{
+                    background: '#fff', border: '1.5px solid #bfdbfe', borderRadius: 12,
+                    padding: '18px 18px', display: 'flex', flexDirection: 'column', gap: 14,
+                    boxShadow: '0 2px 8px rgba(37,99,235,0.08)',
+                }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1e293b' }}>
+                        {alreadyReviewed ? 'Update your review' : 'Share your experience'}
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6, fontWeight: 500 }}>Your Rating *</div>
+                        <StarRating value={form.rating} onChange={v => setForm(f => ({ ...f, rating: v }))} size={28} />
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4, fontWeight: 500 }}>Title (optional)</div>
+                        <input
+                            className="input"
+                            value={form.title}
+                            onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                            placeholder="Summarize your experience…"
+                        />
+                    </div>
+
+                    <div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4, fontWeight: 500 }}>Review (optional)</div>
+                        <textarea
+                            className="input"
+                            value={form.body}
+                            onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+                            placeholder="Describe contractor performance, punctuality, quality…"
+                            rows={4}
+                            style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                        />
+                    </div>
+
+                    {submitMsg && (
+                        <div style={{
+                            padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                            background: submitMsg.ok ? '#f0fdf4' : '#fef2f2',
+                            color: submitMsg.ok ? '#16a34a' : '#dc2626',
+                            border: `1px solid ${submitMsg.ok ? '#bbf7d0' : '#fecaca'}`,
+                        }}>{submitMsg.text}</div>
+                    )}
+
+                    <button
+                        onClick={handleSubmit}
+                        disabled={submitting || form.rating < 1}
+                        style={{
+                            padding: '10px 20px', borderRadius: 8, border: 'none',
+                            background: form.rating > 0 ? '#2563eb' : '#e2e8f0',
+                            color: form.rating > 0 ? '#fff' : '#94a3b8',
+                            fontWeight: 700, fontSize: 13, cursor: form.rating > 0 ? 'pointer' : 'not-allowed',
+                            alignSelf: 'flex-start', transition: 'background .15s',
+                        }}
+                    >
+                        {submitting ? 'Submitting…' : alreadyReviewed ? 'Update Review' : 'Submit Review'}
+                    </button>
+                </div>
+            )}
+
+            {/* ── Reviews list ── */}
+            {reviews.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 13 }}>
+                    📝 No reviews yet. Be the first to rate this contractor!
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {reviews.map(r => <ReviewCard key={r.id} review={r} />)}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ─── ProjectPanel ───────────────────────────────────────────── */
 
 function ProjectPanel({ contractorName, apiFetch }: {
     contractorName: string;
     apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
 }) {
-    const [projects, setProjects] = useState<Project[] | null>(null); // null = loading
+    const [projects, setProjects] = useState<Project[] | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         let cancelled = false;
         setProjects(null);
         setError(null);
-
-        // Use query param – avoids all URL encoding / Flask routing issues
         apiFetch(`/api/contractor-projects?name=${encodeURIComponent(contractorName)}`)
             .then(async res => {
                 if (cancelled) return;
@@ -149,7 +465,6 @@ function ProjectPanel({ contractorName, apiFetch }: {
             .catch(err => {
                 if (!cancelled) setError(err.message || 'Network error');
             });
-
         return () => { cancelled = true; };
     }, [contractorName, apiFetch]);
 
@@ -158,18 +473,14 @@ function ProjectPanel({ contractorName, apiFetch }: {
             ⚠ Could not load projects: {error}
         </div>
     );
-
     if (projects === null) return (
         <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>⏳</div>
-            Loading projects…
+            <div style={{ fontSize: 24, marginBottom: 6 }}>⏳</div>Loading projects…
         </div>
     );
-
     if (projects.length === 0) return (
         <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-            <div style={{ fontSize: 24, marginBottom: 6 }}>📭</div>
-            No project details found for this contractor.
+            <div style={{ fontSize: 24, marginBottom: 6 }}>📭</div>No project details found.
         </div>
     );
 
@@ -186,9 +497,7 @@ function ProjectPanel({ contractorName, apiFetch }: {
                         padding: '12px 14px', gap: 12,
                     }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>
-                                {p.project_name}
-                            </div>
+                            <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>{p.project_name}</div>
                             <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                                 <span>Ward {p.ward_no}{p.ward_name ? ` · ${p.ward_name}` : ''}</span>
                                 {p.project_type && <span>· {p.project_type}</span>}
@@ -220,14 +529,15 @@ function ProjectPanel({ contractorName, apiFetch }: {
 
 /* ─── Main page ─────────────────────────────────────────────── */
 
+type ExpandedTab = 'projects' | 'reviews';
+
 export default function ContractorsPage() {
-    const { apiFetch, city } = useApp();
+    const { apiFetch, city, isAuthorizedUser, user } = useApp();
     const [contractors, setContractors] = useState<Contractor[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [sortBy, setSortBy] = useState<'total' | 'delay' | 'completion' | 'budget'>('total');
-    // Set of expanded contractor names – can open multiple
-    const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const [expanded, setExpanded] = useState<Map<string, ExpandedTab>>(new Map());
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -244,11 +554,14 @@ export default function ContractorsPage() {
 
     useEffect(() => { load(); }, [load]);
 
-    const toggleExpand = (name: string) => {
+    const toggleExpand = (name: string, tab: ExpandedTab = 'projects') => {
         setExpanded(prev => {
-            const next = new Set(prev);
-            if (next.has(name)) next.delete(name);
-            else next.add(name);
+            const next = new Map(prev);
+            if (next.has(name) && next.get(name) === tab) {
+                next.delete(name);
+            } else {
+                next.set(name, tab);
+            }
             return next;
         });
     };
@@ -280,9 +593,8 @@ export default function ContractorsPage() {
                     <h1 style={{ fontSize: 24, fontWeight: 800, marginBottom: 6, letterSpacing: '-0.3px' }}>
                         Contractor Directory
                     </h1>
-                    <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 16, maxWidth: 480 }}>
-                        Track accountability records for every contractor on municipal projects in {cityLabel}.
-                        Click any card to see their full project history.
+                    <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 16, maxWidth: 500 }}>
+                        Track accountability records and community reviews for every contractor on municipal projects in {cityLabel}.
                     </p>
                     <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                         {[
@@ -346,7 +658,8 @@ export default function ContractorsPage() {
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {filtered.map((c, idx) => {
-                        const isOpen = expanded.has(c.contractor_name);
+                        const activeTab = expanded.get(c.contractor_name);
+                        const isOpen = !!activeTab;
                         return (
                             <div key={c.contractor_name} style={{
                                 background: '#fff', border: '1px solid',
@@ -355,10 +668,10 @@ export default function ContractorsPage() {
                                 boxShadow: isOpen ? '0 4px 16px rgba(29,78,216,0.10)' : '0 1px 3px rgba(0,0,0,0.05)',
                                 transition: 'box-shadow .2s, border-color .2s',
                             }}>
-                                {/* ── Card summary row ── */}
+                                {/* ── Summary row ── */}
                                 <div
                                     id={`contractor-${idx}`}
-                                    onClick={() => toggleExpand(c.contractor_name)}
+                                    onClick={() => toggleExpand(c.contractor_name, 'projects')}
                                     style={{
                                         padding: '18px 20px', cursor: 'pointer', userSelect: 'none',
                                         display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
@@ -432,7 +745,7 @@ export default function ContractorsPage() {
                                     }}>▾</div>
                                 </div>
 
-                                {/* Progress bar */}
+                                {/* ── Progress bar ── */}
                                 <div style={{ padding: '0 20px 14px' }}>
                                     <ProgressBar segments={[
                                         { value: c.completed, total: c.total_projects, color: '#22c55e', label: `${c.completed} Completed` },
@@ -442,19 +755,50 @@ export default function ContractorsPage() {
                                     ]} />
                                 </div>
 
-                                {/* ── Expanded detail panel ── */}
+                                {/* ── Expanded panel ── */}
                                 {isOpen && (
                                     <div style={{
                                         borderTop: '1px solid #e0ecff',
                                         background: '#f5f8ff',
-                                        padding: '20px 20px 20px',
                                         animation: 'fadeIn .18s ease',
                                     }}>
-                                        {/* ProjectPanel manages its own fetch lifecycle */}
-                                        <ProjectPanel
-                                            contractorName={c.contractor_name}
-                                            apiFetch={apiFetch}
-                                        />
+                                        {/* Tab strip */}
+                                        <div style={{
+                                            display: 'flex', borderBottom: '1px solid #e0ecff',
+                                            background: '#eef2ff',
+                                        }}>
+                                            {([
+                                                ['projects', '📋 Projects'],
+                                                ['reviews', '⭐ Reviews'],
+                                            ] as [ExpandedTab, string][]).map(([tab, label]) => (
+                                                <button
+                                                    key={tab}
+                                                    onClick={e => { e.stopPropagation(); toggleExpand(c.contractor_name, tab === activeTab ? tab : tab); setExpanded(prev => { const n = new Map(prev); n.set(c.contractor_name, tab); return n; }); }}
+                                                    style={{
+                                                        padding: '10px 18px', border: 'none', cursor: 'pointer',
+                                                        fontSize: 13, fontWeight: 600,
+                                                        background: activeTab === tab ? '#fff' : 'transparent',
+                                                        color: activeTab === tab ? '#1d4ed8' : '#64748b',
+                                                        borderBottom: activeTab === tab ? '2px solid #1d4ed8' : '2px solid transparent',
+                                                        transition: 'all .15s',
+                                                    }}
+                                                >{label}</button>
+                                            ))}
+                                        </div>
+
+                                        <div style={{ padding: '20px 20px' }}>
+                                            {activeTab === 'projects' && (
+                                                <ProjectPanel contractorName={c.contractor_name} apiFetch={apiFetch} />
+                                            )}
+                                            {activeTab === 'reviews' && (
+                                                <ReviewPanel
+                                                    contractorName={c.contractor_name}
+                                                    apiFetch={apiFetch}
+                                                    isAuthorizedUser={isAuthorizedUser}
+                                                    user={user}
+                                                />
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>

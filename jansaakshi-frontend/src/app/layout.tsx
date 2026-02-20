@@ -3,6 +3,18 @@ import { AppProvider } from '@/context/AppContext';
 import Navigation from '@/components/Navigation';
 import type { Metadata } from 'next';
 import 'leaflet/dist/leaflet.css';
+import { Outfit, Noto_Sans_Devanagari } from 'next/font/google';
+
+const outfit = Outfit({
+    subsets: ['latin'],
+    variable: '--font-outfit',
+});
+
+const notoDevenagari = Noto_Sans_Devanagari({
+    subsets: ['devanagari'],
+    variable: '--font-noto-devenagari',
+    weight: ['400', '500', '600', '700', '900'],
+});
 
 export const metadata: Metadata = {
     title: 'JanSaakshi — Municipal Accountability',
@@ -11,7 +23,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
     return (
-        <html lang="en">
+        <html lang="en" className={`${outfit.variable} ${notoDevenagari.variable}`}>
             <head>
                 <link rel="manifest" href="/manifest.json" />
                 <meta name="theme-color" content="#1d4ed8" />
@@ -20,7 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <body>
                 <AppProvider>
                     <Navigation />
-                    <main className="page-container" style={{paddingTop:150}}>{children}</main>
+                    <main className="page-container" style={{ paddingTop: 150 }}>{children}</main>
                 </AppProvider>
             </body>
         </html>

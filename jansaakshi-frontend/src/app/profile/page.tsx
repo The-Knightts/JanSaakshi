@@ -9,15 +9,23 @@ export default function ProfilePage() {
     const [form, setForm] = useState({ username: '', password: '', display_name: '', city: 'mumbai', ward: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [signupSuccess, setSignupSuccess] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
-        const result = mode === 'login'
-            ? await login(form.username, form.password)
-            : await signup(form);
-        if (!result.success) setError(result.error || 'Something went wrong');
+        if (mode === 'login') {
+            const result = await login(form.username, form.password);
+            if (!result.success) setError(result.error || 'Invalid credentials');
+        } else {
+            const result = await signup(form);
+            if (result.success) {
+                setSignupSuccess(true);
+            } else {
+                setError(result.error || 'Something went wrong');
+            }
+        }
         setLoading(false);
     };
 
@@ -29,6 +37,15 @@ export default function ProfilePage() {
                     <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Manage your preferences</p>
                 </div>
 
+                {signupSuccess && (
+                    <div style={{
+                        padding: '10px 16px', borderRadius: '8px', fontSize: '14px',
+                        background: 'var(--green-bg, #f0fdf4)', color: 'var(--green, #16a34a)',
+                        border: '1px solid #bbf7d0', fontWeight: 500,
+                    }}>
+                        🎉 Account created successfully! Welcome, {user.display_name}.
+                    </div>
+                )}
                 <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                         <div>
