@@ -6,7 +6,7 @@ import { useApp } from '@/context/AppContext';
 export default function ProfilePage() {
     const { user, login, signup, logout, city, setCity } = useApp();
     const [mode, setMode] = useState('login');
-    const [form, setForm] = useState({ username: '', password: '', display_name: '', city: 'mumbai', ward_number: '' });
+    const [form, setForm] = useState({ username: '', password: '', display_name: '', city: 'mumbai', ward: '' });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -14,11 +14,9 @@ export default function ProfilePage() {
         e.preventDefault();
         setError('');
         setLoading(true);
-
         const result = mode === 'login'
             ? await login(form.username, form.password)
             : await signup(form);
-
         if (!result.success) setError(result.error || 'Something went wrong');
         setLoading(false);
     };
@@ -50,7 +48,7 @@ export default function ProfilePage() {
                         </div>
                         <div>
                             <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Ward Number</label>
-                            <input className="input" value={user.ward_number || ''} disabled style={{ background: 'var(--bg)' }} />
+                            <input className="input" value={user.ward || ''} disabled style={{ background: 'var(--bg)' }} />
                             <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Ward is set during signup</p>
                         </div>
                     </div>
@@ -108,8 +106,8 @@ export default function ProfilePage() {
                                 </select>
                             </div>
                             <div>
-                                <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Ward</label>
-                                <input className="input" value={form.ward_number} onChange={(e) => setForm({ ...form, ward_number: e.target.value })} placeholder="e.g. R/S" />
+                                <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>Ward No.</label>
+                                <input className="input" value={form.ward} onChange={(e) => setForm({ ...form, ward: e.target.value })} placeholder="e.g. 77" />
                             </div>
                         </div>
                     </>
@@ -120,11 +118,8 @@ export default function ProfilePage() {
                 </button>
 
                 <div style={{ textAlign: 'center' }}>
-                    <button
-                        type="button"
-                        onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}
-                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '13px' }}
-                    >
+                    <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', fontSize: '13px' }}>
                         {mode === 'login' ? 'Need an account? Sign up' : 'Already have an account? Log in'}
                     </button>
                 </div>

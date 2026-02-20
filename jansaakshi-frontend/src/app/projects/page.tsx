@@ -40,6 +40,7 @@ export default function ProjectsPage() {
                     <option value="delayed">Delayed</option>
                     <option value="ongoing">Ongoing</option>
                     <option value="completed">Completed</option>
+                    <option value="stalled">Stalled</option>
                     <option value="approved">Approved</option>
                 </select>
                 <select className="input" value={filter.type}
@@ -71,8 +72,8 @@ export default function ProjectsPage() {
                                     <div className="project-name">{p.project_name}</div>
                                     {p.summary && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '3px', lineHeight: 1.5 }}>{p.summary}</p>}
                                     <div className="project-meta" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '5px' }}>
-                                        <span>Ward {p.ward_number} – {p.ward_name}</span>
-                                        {p.budget_amount && <span>₹{(p.budget_amount / 100000).toFixed(1)}L</span>}
+                                        <span>Ward {p.ward_no} – {p.ward_name}{p.ward_zone ? ` (${p.ward_zone})` : ''}</span>
+                                        {p.budget && <span>₹{(p.budget / 100000).toFixed(1)}L</span>}
                                         {p.contractor_name && <span>{p.contractor_name}</span>}
                                     </div>
                                 </div>

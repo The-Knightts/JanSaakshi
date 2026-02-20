@@ -69,14 +69,9 @@ export default function AdminPage() {
                 <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Manage PDFs and complaints for {city}</p>
             </div>
 
-            {/* Tabs */}
             <div style={{ display: 'flex', gap: '4px' }}>
-                <button className={`btn ${tab === 'upload' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('upload')}>
-                    PDF Upload
-                </button>
-                <button className={`btn ${tab === 'complaints' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('complaints')}>
-                    Complaints
-                </button>
+                <button className={`btn ${tab === 'upload' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('upload')}>PDF Upload</button>
+                <button className={`btn ${tab === 'complaints' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTab('complaints')}>Complaints</button>
             </div>
 
             {tab === 'upload' && (
@@ -110,7 +105,7 @@ export default function AdminPage() {
                                 <div key={i} className="project-item">
                                     <div>
                                         <div className="project-name">{p.project_name}</div>
-                                        <div className="project-meta">Ward {p.ward_number} – {p.ward_name}</div>
+                                        <div className="project-meta">Ward {p.ward_no} – {p.ward_name}{p.ward_zone ? ` (${p.ward_zone})` : ''}</div>
                                     </div>
                                     <span className={`status-badge status-${p.status || 'pending'}`}>{p.status || 'pending'}</span>
                                 </div>
@@ -132,7 +127,7 @@ export default function AdminPage() {
                                     <div className="project-name">{c.category}</div>
                                     <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{c.description}</p>
                                     <div className="project-meta">
-                                        Ward {c.ward_number} · {c.citizen_name || 'Anonymous'} · {c.created_at?.split('T')[0]}
+                                        Ward {c.ward_no} · {c.citizen_name || 'Anonymous'} · {c.created_at?.split('T')[0]}
                                     </div>
                                 </div>
                                 <span className={`status-badge ${c.status === 'resolved' ? 'status-completed' : c.status === 'in_progress' ? 'status-ongoing' : 'status-approved'}`}>

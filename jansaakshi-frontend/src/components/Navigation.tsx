@@ -3,8 +3,9 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useApp } from '@/context/AppContext';
+import { ReactElement } from 'react';
 
-const icon = (d) => (
+const icon = (d: ReactElement): ReactElement => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         {d}
     </svg>
@@ -22,7 +23,13 @@ const icons = {
     map: icon(<><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" /><line x1="8" y1="2" x2="8" y2="18" /><line x1="16" y1="6" x2="16" y2="22" /></>),
 };
 
-const mainNav = [
+interface NavItem {
+    href: string;
+    label: string;
+    icon: ReactElement;
+}
+
+const mainNav: NavItem[] = [
     { href: '/', label: 'Home', icon: icons.home },
     { href: '/projects', label: 'Projects', icon: icons.projects },
     { href: '/meetings', label: 'Meetings', icon: icons.meetings },

@@ -8,122 +8,125 @@ DATABASE_PATH = os.environ.get("DATABASE_PATH", "jansaakshi.db")
 
 
 def get_db():
-    """Get a database connection with row_factory set."""
     conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
 def init_database():
-    """Initialize database with complete schema."""
     conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
-    cursor = conn.cursor()
+    c = conn.cursor()
+
+    # Schema migration: drop old tables if city table doesn't exist
+    try:
+        c.execute("SELECT 1 FROM city LIMIT 1")
+    except sqlite3.OperationalError:
+        print("Schema migration: dropping old tables...")
+        for t in ["follow_ups", "complaints", "meetings", "projects", "users", "city"]:
+            c.execute(f"DROP TABLE IF EXISTS {t}")
+        conn.commit()
+
+    # City table (FK source)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS city (
+            city_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            city_name TEXT NOT NULL UNIQUE,
+            state TEXT NOT NULL
+        )
+    """)
 
     # Users
-    cursor.execute("""
+    c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
+            password TEXT NOT NULL,
             display_name TEXT,
-            city TEXT DEFAULT 'mumbai',
-            ward_number TEXT,
+            city_id INTEGER,
+            ward TEXT,
             role TEXT DEFAULT 'user',
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (city_id) REFERENCES city(city_id)
         )
     """)
 
     # Projects
-    cursor.execute("""
+    c.execute("""
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city TEXT DEFAULT 'mumbai',
+            city_id INTEGER NOT NULL,
             project_name TEXT NOT NULL,
             summary TEXT,
-            ward_number TEXT,
+            ward_no TEXT,
             ward_name TEXT,
-            budget_amount REAL,
+            ward_zone TEXT,
+            status TEXT,
+            budget REAL,
             corporator_name TEXT,
             contractor_name TEXT,
-            responsible_official TEXT,
+            project_type TEXT,
             approval_date TEXT,
+            start_date TEXT,
             expected_completion TEXT,
             actual_completion TEXT,
-            project_type TEXT,
-            status TEXT,
             delay_days INTEGER DEFAULT 0,
             location_details TEXT,
-            coordinates_lat REAL,
-            coordinates_lng REAL,
-            source_pdf TEXT,
-            extracted_at TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            source_pdf TEXT,
+            FOREIGN KEY (city_id) REFERENCES city(city_id)
         )
     """)
 
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_city ON projects(city)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_ward ON projects(ward_number)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_type ON projects(project_type)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_delay ON projects(delay_days)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_proj_city ON projects(city_id)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_proj_ward ON projects(ward_no)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_proj_status ON projects(status)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_proj_type ON projects(project_type)")
 
     # Meetings
-    cursor.execute("""
+    c.execute("""
         CREATE TABLE IF NOT EXISTS meetings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city TEXT DEFAULT 'mumbai',
-            ward_number TEXT,
+            city_id INTEGER NOT NULL,
+            ward_no TEXT,
             ward_name TEXT,
-            meeting_date TEXT,
-            meeting_type TEXT,
+            meet_date TEXT,
+            meet_type TEXT,
             venue TEXT,
             objective TEXT,
             attendees TEXT,
             projects_discussed TEXT,
-            pdf_filename TEXT,
-            projects_count INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    # Wards
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS wards (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city TEXT DEFAULT 'mumbai',
-            ward_number TEXT,
-            ward_name TEXT,
-            center_lat REAL,
-            center_lng REAL,
-            corporator_name TEXT,
-            corporator_party TEXT,
-            UNIQUE(city, ward_number)
+            source_pdf TEXT,
+            project_count INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (city_id) REFERENCES city(city_id)
         )
     """)
 
     # Complaints
-    cursor.execute("""
+    c.execute("""
         CREATE TABLE IF NOT EXISTS complaints (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            city TEXT DEFAULT 'mumbai',
+            city_id INTEGER,
             user_id INTEGER,
-            ward_number TEXT,
+            ward_no TEXT,
             category TEXT,
             description TEXT,
             location TEXT,
             citizen_name TEXT,
-            citizen_phone TEXT,
+            user_phone TEXT,
             status TEXT DEFAULT 'submitted',
             admin_notes TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (city_id) REFERENCES city(city_id),
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
 
-    # Follow-ups (users tracking specific projects)
-    cursor.execute("""
+    # Follow-ups
+    c.execute("""
         CREATE TABLE IF NOT EXISTS follow_ups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -140,6 +143,23 @@ def init_database():
     print("Database initialized")
 
 
+# ==================== CITY ====================
+
+
+def get_city_id(city_name):
+    conn = get_db()
+    row = conn.execute("SELECT city_id FROM city WHERE city_name=?", (city_name,)).fetchone()
+    conn.close()
+    return row["city_id"] if row else None
+
+
+def get_all_cities():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM city").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 # ==================== AUTH ====================
 
 
@@ -154,17 +174,17 @@ def verify_password(password, stored):
     return hashlib.sha256((salt + password).encode()).hexdigest() == h
 
 
-def create_user(username, password, display_name=None, city="mumbai", ward_number=None, role="user"):
+def create_user(username, password, display_name=None, city_id=None, ward=None, role="user"):
     conn = get_db()
     try:
         conn.execute(
-            "INSERT INTO users (username, password_hash, display_name, city, ward_number, role) VALUES (?,?,?,?,?,?)",
-            (username, hash_password(password), display_name or username, city, ward_number, role),
+            "INSERT INTO users (username, password, display_name, city_id, ward, role) VALUES (?,?,?,?,?,?)",
+            (username, hash_password(password), display_name or username, city_id, ward, role),
         )
         conn.commit()
-        user_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        uid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
         conn.close()
-        return user_id
+        return uid
     except sqlite3.IntegrityError:
         conn.close()
         return None
@@ -172,16 +192,24 @@ def create_user(username, password, display_name=None, city="mumbai", ward_numbe
 
 def authenticate_user(username, password):
     conn = get_db()
-    row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    row = conn.execute("""
+        SELECT u.*, c.city_name FROM users u
+        LEFT JOIN city c ON u.city_id = c.city_id
+        WHERE u.username = ?
+    """, (username,)).fetchone()
     conn.close()
-    if row and verify_password(password, row["password_hash"]):
+    if row and verify_password(password, row["password"]):
         return dict(row)
     return None
 
 
 def get_user_by_id(user_id):
     conn = get_db()
-    row = conn.execute("SELECT id, username, display_name, city, ward_number, role, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+    row = conn.execute("""
+        SELECT u.id, u.username, u.display_name, u.city_id, c.city_name, u.ward, u.role, u.created_at
+        FROM users u LEFT JOIN city c ON u.city_id = c.city_id
+        WHERE u.id = ?
+    """, (user_id,)).fetchone()
     conn.close()
     return dict(row) if row else None
 
@@ -189,29 +217,27 @@ def get_user_by_id(user_id):
 # ==================== PROJECTS ====================
 
 
-def insert_projects(projects_list, city="mumbai"):
+def insert_projects(projects_list, city_id):
     conn = get_db()
     inserted = 0
     for p in projects_list:
         try:
             conn.execute("""
                 INSERT INTO projects (
-                    city, project_name, summary, ward_number, ward_name,
-                    budget_amount, corporator_name, contractor_name,
-                    approval_date, expected_completion, project_type,
-                    status, delay_days, location_details, source_pdf,
-                    extracted_at, created_at
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    city_id, project_name, summary, ward_no, ward_name, ward_zone,
+                    status, budget, corporator_name, contractor_name, project_type,
+                    approval_date, start_date, expected_completion, actual_completion,
+                    delay_days, location_details, source_pdf, created_at, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
-                city,
-                p.get("project_name"), p.get("summary"),
-                p.get("ward_number"), p.get("ward_name"),
-                p.get("budget_amount"), p.get("corporator_name"),
-                p.get("contractor_name"), p.get("approval_date"),
-                p.get("expected_completion"), p.get("project_type"),
-                p.get("status"), p.get("delay_days", 0),
-                p.get("location_details"), p.get("source_pdf"),
-                p.get("extracted_at"), datetime.now().isoformat(),
+                city_id, p.get("project_name"), p.get("summary"),
+                p.get("ward_no"), p.get("ward_name"), p.get("ward_zone"),
+                p.get("status"), p.get("budget"), p.get("corporator_name"),
+                p.get("contractor_name"), p.get("project_type"),
+                p.get("approval_date"), p.get("start_date"),
+                p.get("expected_completion"), p.get("actual_completion"),
+                p.get("delay_days", 0), p.get("location_details"),
+                p.get("source_pdf"), datetime.now().isoformat(), datetime.now().isoformat(),
             ))
             inserted += 1
         except Exception as e:
@@ -221,77 +247,113 @@ def insert_projects(projects_list, city="mumbai"):
     return inserted
 
 
-def search_projects(city=None, ward_number=None, ward_name=None,
+def search_projects(city_id=None, ward_no=None, ward_name=None,
                     project_type=None, status=None, keyword=None,
                     corporator=None, min_delay=None):
     conn = get_db()
-    q = "SELECT * FROM projects WHERE 1=1"
+    q = "SELECT p.*, c.city_name FROM projects p JOIN city c ON p.city_id=c.city_id WHERE 1=1"
     params = []
 
-    if city:
-        q += " AND city = ?"
-        params.append(city)
-    if ward_number:
-        q += " AND ward_number = ?"
-        params.append(str(ward_number))
+    if city_id:
+        q += " AND p.city_id=?"
+        params.append(city_id)
+    if ward_no:
+        q += " AND p.ward_no=?"
+        params.append(str(ward_no))
     if ward_name:
-        q += " AND LOWER(ward_name) LIKE ?"
+        q += " AND LOWER(p.ward_name) LIKE ?"
         params.append(f"%{ward_name.lower()}%")
     if project_type:
-        q += " AND project_type = ?"
+        q += " AND p.project_type=?"
         params.append(project_type)
     if status:
-        q += " AND status = ?"
+        q += " AND p.status=?"
         params.append(status)
     if keyword:
-        q += " AND (LOWER(project_name) LIKE ? OR LOWER(location_details) LIKE ? OR LOWER(summary) LIKE ?)"
-        kw = f"%{keyword.lower()}%"
-        params.extend([kw, kw, kw])
+        # Smart keyword search: split into words, match ANY word across all text fields
+        # This enables "Eastern Freeway Extension" to match projects containing any of those words
+        words = [w.strip() for w in keyword.lower().split() if len(w.strip()) >= 2]
+        stop_words = {"the", "is", "in", "at", "of", "on", "for", "to", "and", "or", "an",
+                       "what", "how", "which", "where", "when", "show", "tell", "me", "my",
+                       "are", "has", "have", "with", "about", "update", "status", "projects"}
+        words = [w for w in words if w not in stop_words] or [keyword.lower()]
+
+        if words:
+            word_clauses = []
+            for w in words:
+                wk = f"%{w}%"
+                word_clauses.append(
+                    "(LOWER(p.project_name) LIKE ? OR LOWER(p.summary) LIKE ? "
+                    "OR LOWER(p.location_details) LIKE ? OR LOWER(p.ward_name) LIKE ? "
+                    "OR LOWER(p.contractor_name) LIKE ? OR LOWER(p.corporator_name) LIKE ?)"
+                )
+                params.extend([wk, wk, wk, wk, wk, wk])
+            # Match ANY word (OR logic for broader results)
+            q += " AND (" + " OR ".join(word_clauses) + ")"
     if corporator:
-        q += " AND LOWER(corporator_name) LIKE ?"
+        q += " AND LOWER(p.corporator_name) LIKE ?"
         params.append(f"%{corporator.lower()}%")
     if min_delay:
-        q += " AND delay_days >= ?"
+        q += " AND p.delay_days>=?"
         params.append(int(min_delay))
 
-    q += " ORDER BY created_at DESC LIMIT 100"
+    q += " ORDER BY p.delay_days DESC, p.created_at DESC LIMIT 100"
     rows = conn.execute(q, params).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    results = [dict(r) for r in rows]
+
+    # Rank results by relevance: count how many keywords match
+    if keyword and results:
+        words = [w.strip() for w in keyword.lower().split() if len(w.strip()) >= 2]
+        words = [w for w in words if w not in stop_words] or [keyword.lower()]
+        for r in results:
+            searchable = " ".join([
+                (r.get("project_name") or ""), (r.get("summary") or ""),
+                (r.get("location_details") or ""), (r.get("ward_name") or ""),
+                (r.get("contractor_name") or ""), (r.get("corporator_name") or ""),
+            ]).lower()
+            r["_relevance"] = sum(1 for w in words if w in searchable)
+        results.sort(key=lambda x: (-x.get("_relevance", 0), -x.get("delay_days", 0)))
+        for r in results:
+            r.pop("_relevance", None)
+
+    return results
 
 
-def get_ward_stats(city=None):
+def get_ward_stats(city_id=None):
     conn = get_db()
     q = """
-        SELECT ward_number, ward_name,
+        SELECT ward_no, ward_name, ward_zone,
             COUNT(*) as total_projects,
             SUM(CASE WHEN status='delayed' THEN 1 ELSE 0 END) as delayed_projects,
             SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END) as completed_projects,
-            SUM(budget_amount) as total_budget,
+            SUM(CASE WHEN status='stalled' THEN 1 ELSE 0 END) as stalled_projects,
+            SUM(budget) as total_budget,
             MAX(corporator_name) as corporator_name
-        FROM projects WHERE ward_number IS NOT NULL
+        FROM projects WHERE ward_no IS NOT NULL
     """
     params = []
-    if city:
-        q += " AND city = ?"
-        params.append(city)
-    q += " GROUP BY ward_number ORDER BY ward_number"
+    if city_id:
+        q += " AND city_id=?"
+        params.append(city_id)
+    q += " GROUP BY ward_no ORDER BY ward_no"
     rows = conn.execute(q, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def get_statistics(city=None):
+def get_statistics(city_id=None):
     conn = get_db()
-    where = " WHERE city = ?" if city else ""
-    params = [city] if city else []
+    w = " WHERE city_id=?" if city_id else ""
+    p = [city_id] if city_id else []
+    a = " AND" if city_id else " WHERE"
 
     stats = {}
-    stats["total_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{where}", params).fetchone()[0]
-    stats["delayed_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{where} {'AND' if city else 'WHERE'} status='delayed'", params).fetchone()[0]
-    stats["total_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget_amount),0) FROM projects{where}", params).fetchone()[0]
-    stats["delayed_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget_amount),0) FROM projects{where} {'AND' if city else 'WHERE'} status='delayed'", params).fetchone()[0]
-    stats["total_wards"] = conn.execute(f"SELECT COUNT(DISTINCT ward_number) FROM projects{where}", params).fetchone()[0]
+    stats["total_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{w}", p).fetchone()[0]
+    stats["delayed_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{w}{a} status='delayed'", p).fetchone()[0]
+    stats["total_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget),0) FROM projects{w}", p).fetchone()[0]
+    stats["delayed_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget),0) FROM projects{w}{a} status='delayed'", p).fetchone()[0]
+    stats["total_wards"] = conn.execute(f"SELECT COUNT(DISTINCT ward_no) FROM projects{w}", p).fetchone()[0]
     conn.close()
     return stats
 
@@ -299,17 +361,17 @@ def get_statistics(city=None):
 # ==================== MEETINGS ====================
 
 
-def get_meetings(city=None, ward_number=None):
+def get_meetings(city_id=None, ward_no=None):
     conn = get_db()
-    q = "SELECT * FROM meetings WHERE 1=1"
+    q = "SELECT m.*, c.city_name FROM meetings m JOIN city c ON m.city_id=c.city_id WHERE 1=1"
     params = []
-    if city:
-        q += " AND city = ?"
-        params.append(city)
-    if ward_number:
-        q += " AND ward_number = ?"
-        params.append(ward_number)
-    q += " ORDER BY meeting_date DESC LIMIT 50"
+    if city_id:
+        q += " AND m.city_id=?"
+        params.append(city_id)
+    if ward_no:
+        q += " AND m.ward_no=?"
+        params.append(ward_no)
+    q += " ORDER BY m.meet_date DESC LIMIT 50"
     rows = conn.execute(q, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -318,15 +380,15 @@ def get_meetings(city=None, ward_number=None):
 # ==================== COMPLAINTS ====================
 
 
-def insert_complaint(data, user_id=None, city="mumbai"):
+def insert_complaint(data, user_id=None, city_id=None):
     conn = get_db()
     conn.execute("""
-        INSERT INTO complaints (city, user_id, ward_number, category, description, location, citizen_name, citizen_phone)
+        INSERT INTO complaints (city_id, user_id, ward_no, category, description, location, citizen_name, user_phone)
         VALUES (?,?,?,?,?,?,?,?)
     """, (
-        city, user_id, data.get("ward_number"), data.get("category"),
+        city_id, user_id, data.get("ward_no"), data.get("category"),
         data.get("description"), data.get("location"),
-        data.get("citizen_name"), data.get("citizen_phone"),
+        data.get("citizen_name"), data.get("user_phone"),
     ))
     cid = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.commit()
@@ -336,18 +398,18 @@ def insert_complaint(data, user_id=None, city="mumbai"):
 
 def get_complaints_for_user(user_id):
     conn = get_db()
-    rows = conn.execute("SELECT * FROM complaints WHERE user_id = ? ORDER BY created_at DESC", (user_id,)).fetchall()
+    rows = conn.execute("SELECT * FROM complaints WHERE user_id=? ORDER BY created_at DESC", (user_id,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
 
-def get_all_complaints(city=None):
+def get_all_complaints(city_id=None):
     conn = get_db()
     q = "SELECT * FROM complaints"
     params = []
-    if city:
-        q += " WHERE city = ?"
-        params.append(city)
+    if city_id:
+        q += " WHERE city_id=?"
+        params.append(city_id)
     q += " ORDER BY created_at DESC LIMIT 100"
     rows = conn.execute(q, params).fetchall()
     conn.close()
@@ -386,9 +448,10 @@ def remove_follow_up(user_id, project_id):
 def get_followed_projects(user_id):
     conn = get_db()
     rows = conn.execute("""
-        SELECT p.* FROM projects p
-        JOIN follow_ups f ON p.id = f.project_id
-        WHERE f.user_id = ?
+        SELECT p.*, c.city_name FROM projects p
+        JOIN city c ON p.city_id=c.city_id
+        JOIN follow_ups f ON p.id=f.project_id
+        WHERE f.user_id=?
         ORDER BY p.updated_at DESC
     """, (user_id,)).fetchall()
     conn.close()

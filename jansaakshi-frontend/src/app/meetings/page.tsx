@@ -6,7 +6,7 @@ import { useApp } from '@/context/AppContext';
 export default function MeetingsPage() {
     const { user, apiFetch, city } = useApp();
     const [meetings, setMeetings] = useState([]);
-    const [ward, setWard] = useState(user?.ward_number || '');
+    const [ward, setWard] = useState(user?.ward || '');
     const [loading, setLoading] = useState(true);
 
     const load = useCallback(async () => {
@@ -20,7 +20,7 @@ export default function MeetingsPage() {
     }, [ward, apiFetch]);
 
     useEffect(() => {
-        if (user?.ward_number && !ward) setWard(user.ward_number);
+        if (user?.ward && !ward) setWard(user.ward);
     }, [user, ward]);
 
     useEffect(() => { load(); }, [load]);
@@ -34,27 +34,17 @@ export default function MeetingsPage() {
                 </p>
             </div>
 
-            {/* Ward filter */}
             <div className="card" style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                    className="input"
-                    placeholder="Filter by ward (e.g. R/S or Central)"
-                    value={ward}
-                    onChange={(e) => setWard(e.target.value)}
-                    style={{ maxWidth: '300px' }}
-                />
+                <input className="input" placeholder="Filter by ward number (e.g. 77 or 50)" value={ward}
+                    onChange={(e) => setWard(e.target.value)} style={{ maxWidth: '300px' }} />
                 <button className="btn btn-primary" onClick={load}>Filter</button>
-                {ward && (
-                    <button className="btn btn-outline" onClick={() => { setWard(''); }}>
-                        Show all
-                    </button>
-                )}
+                {ward && <button className="btn btn-outline" onClick={() => setWard('')}>Show all</button>}
             </div>
 
-            {!ward && !user?.ward_number && (
+            {!ward && !user?.ward && (
                 <div className="card" style={{ background: 'var(--primary-light)', borderColor: '#bfdbfe' }}>
                     <p style={{ color: 'var(--primary)', fontSize: '13px' }}>
-                        Enter a ward number above to see meetings for your area, or log in to set a default ward.
+                        Enter a ward number above to see meetings, or log in to set a default ward.
                     </p>
                 </div>
             )}
@@ -72,25 +62,19 @@ export default function MeetingsPage() {
                         <div key={i} className="project-item" style={{ flexDirection: 'column', gap: '6px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
                                 <div>
-                                    <div className="project-name">{m.meeting_type === 'ward_committee' ? 'Ward Committee Meeting' : m.meeting_type === 'zone_committee' ? 'Zone Committee Meeting' : m.meeting_type || 'Meeting'}</div>
-                                    <div className="project-meta">Ward {m.ward_number} – {m.ward_name} · {m.meeting_date}</div>
+                                    <div className="project-name">
+                                        {m.meet_type === 'ward_committee' ? 'Ward Committee Meeting' : m.meet_type === 'zone_committee' ? 'Zone Committee Meeting' : m.meet_type || 'Meeting'}
+                                    </div>
+                                    <div className="project-meta">Ward {m.ward_no} – {m.ward_name} · {m.meet_date}</div>
                                 </div>
-                                {m.projects_count > 0 && (
-                                    <span className="status-badge status-approved">{m.projects_count} projects</span>
+                                {m.project_count > 0 && (
+                                    <span className="status-badge status-approved">{m.project_count} projects</span>
                                 )}
                             </div>
-                            {m.objective && (
-                                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{m.objective}</p>
-                            )}
-                            {m.venue && (
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Venue: {m.venue}</p>
-                            )}
-                            {m.attendees && (
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Attendees: {m.attendees}</p>
-                            )}
-                            {m.projects_discussed && (
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Projects discussed: {m.projects_discussed}</p>
-                            )}
+                            {m.objective && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>{m.objective}</p>}
+                            {m.venue && <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Venue: {m.venue}</p>}
+                            {m.attendees && <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Attendees: {m.attendees}</p>}
+                            {m.projects_discussed && <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Projects: {m.projects_discussed}</p>}
                         </div>
                     ))
                 )}

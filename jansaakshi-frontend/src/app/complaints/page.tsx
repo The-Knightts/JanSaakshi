@@ -15,8 +15,8 @@ export default function ComplaintsPage() {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [form, setForm] = useState({
-        ward_number: user?.ward_number || '', category: '', description: '',
-        location: '', citizen_name: user?.display_name || '', citizen_phone: '',
+        ward_no: user?.ward || '', category: '', description: '',
+        location: '', citizen_name: user?.display_name || '', user_phone: '',
     });
 
     const loadComplaints = useCallback(async () => {
@@ -41,7 +41,7 @@ export default function ComplaintsPage() {
             if (res.ok) {
                 setSubmitted(true);
                 setTimeout(() => { setSubmitted(false); setShowForm(false); loadComplaints(); }, 1500);
-                setForm({ ward_number: user?.ward_number || '', category: '', description: '', location: '', citizen_name: user?.display_name || '', citizen_phone: '' });
+                setForm({ ward_no: user?.ward || '', category: '', description: '', location: '', citizen_name: user?.display_name || '', user_phone: '' });
             }
         } catch { }
         setSubmitting(false);
@@ -80,13 +80,13 @@ export default function ComplaintsPage() {
                                 </div>
                                 <div>
                                     <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>Phone</label>
-                                    <input className="input" value={form.citizen_phone} onChange={(e) => setForm({ ...form, citizen_phone: e.target.value })} placeholder="Optional" />
+                                    <input className="input" value={form.user_phone} onChange={(e) => setForm({ ...form, user_phone: e.target.value })} placeholder="Optional" />
                                 </div>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                                 <div>
-                                    <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>Ward</label>
-                                    <input className="input" value={form.ward_number} onChange={(e) => setForm({ ...form, ward_number: e.target.value })} placeholder="e.g. R/S" />
+                                    <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>Ward No.</label>
+                                    <input className="input" value={form.ward_no} onChange={(e) => setForm({ ...form, ward_no: e.target.value })} placeholder="e.g. 77" />
                                 </div>
                                 <div>
                                     <label style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '3px' }}>Category *</label>
@@ -124,7 +124,7 @@ export default function ComplaintsPage() {
                             <div className="project-name">{c.category}</div>
                             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>{c.description}</p>
                             <div className="project-meta">
-                                {c.ward_number ? `Ward ${c.ward_number}` : ''}{c.location ? ` · ${c.location}` : ''}
+                                {c.ward_no ? `Ward ${c.ward_no}` : ''}{c.location ? ` · ${c.location}` : ''}
                                 {c.created_at ? ` · ${c.created_at.split('T')[0]}` : ''}
                             </div>
                             {c.admin_notes && <p style={{ fontSize: '12px', color: 'var(--primary)', marginTop: '4px' }}>Admin: {c.admin_notes}</p>}

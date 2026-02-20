@@ -3,5 +3,5 @@ flask-cors
 pdfplumber
 pytesseract
 Pillow
-groq
+sarvamai
 python-dotenv

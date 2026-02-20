@@ -34,7 +34,7 @@ export default function SearchPage() {
 
             <form onSubmit={handleSearch} className="search-bar">
                 <input className="input" value={query} onChange={(e) => setQuery(e.target.value)}
-                    placeholder="e.g. What projects are delayed in Kandivali?" />
+                    placeholder="e.g. What projects are delayed in Ward 77?" />
                 <button type="submit" className="btn btn-primary" disabled={loading}>
                     {loading ? 'Searching...' : 'Search'}
                 </button>
@@ -47,7 +47,7 @@ export default function SearchPage() {
                         {[
                             'Show me road projects in Kandivali',
                             'What projects are delayed?',
-                            'What is happening in Bandra?',
+                            'What is happening in Ward 68?',
                             city === 'delhi' ? 'Show projects in Dwarka' : 'Healthcare projects in Mulund',
                         ].map((q) => (
                             <button key={q} onClick={() => setQuery(q)} style={{
@@ -78,7 +78,7 @@ export default function SearchPage() {
                                         <div key={i} className="project-item">
                                             <div>
                                                 <div className="project-name">{p.project_name}</div>
-                                                <div className="project-meta">Ward {p.ward_number} – {p.ward_name}{p.budget_amount ? ` · ₹${(p.budget_amount / 100000).toFixed(1)}L` : ''}</div>
+                                                <div className="project-meta">Ward {p.ward_no} – {p.ward_name}{p.budget ? ` · ₹${(p.budget / 100000).toFixed(1)}L` : ''}{p.ward_zone ? ` (${p.ward_zone})` : ''}</div>
                                             </div>
                                             <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                                 <span className={`status-badge status-${p.status}`}>{p.status}</span>

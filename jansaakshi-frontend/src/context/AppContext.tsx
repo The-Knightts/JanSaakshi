@@ -1,14 +1,29 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
-const AppContext = createContext(null);
 
-export function AppProvider({ children }) {
-    const [user, setUser] = useState(null);
+interface AppContextValue {
+    user: any;
+    city: string;
+    setCity: (city: string) => void;
+    token: string | null;
+    loading: boolean;
+    login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+    signup: (formData: any) => Promise<{ success: boolean; error?: string }>;
+    logout: () => Promise<void>;
+    apiFetch: (url: string, options?: RequestInit) => Promise<Response>;
+    isAdmin: boolean;
+    API: string;
+}
+
+const AppContext = createContext<AppContextValue | null>(null);
+
+export function AppProvider({ children }: { children: ReactNode }) {
+    const [user, setUser] = useState<any>(null);
     const [city, setCity] = useState('mumbai');
-    const [token, setToken] = useState(null);
+    const [token, setToken] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     // Restore from localStorage
@@ -34,7 +49,7 @@ export function AppProvider({ children }) {
             .then((data) => {
                 if (data.user) {
                     setUser(data.user);
-                    if (data.user.city) setCity(data.user.city);
+                    if (data.user.city_name) setCity(data.user.city_name);
                 } else {
                     setToken(null);
                     setUser(null);
@@ -48,7 +63,7 @@ export function AppProvider({ children }) {
         localStorage.setItem('jansaakshi', JSON.stringify({ token, city }));
     }, [token, city]);
 
-    const login = useCallback(async (username, password) => {
+    const login = useCallback(async (username: string, password: string) => {
         const res = await fetch(`${API}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -58,13 +73,13 @@ export function AppProvider({ children }) {
         if (data.success) {
             setToken(data.token);
             setUser(data.user);
-            if (data.user.city) setCity(data.user.city);
+            if (data.user.city_name) setCity(data.user.city_name);
             return { success: true };
         }
         return { success: false, error: data.error };
     }, []);
 
-    const signup = useCallback(async (formData) => {
+    const signup = useCallback(async (formData: any) => {
         const res = await fetch(`${API}/api/auth/signup`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -91,8 +106,8 @@ export function AppProvider({ children }) {
     }, [token]);
 
     // Helper: add auth + city headers
-    const apiFetch = useCallback((url, options = {}) => {
-        const headers = { ...options.headers };
+    const apiFetch = useCallback((url: string, options: RequestInit = {}) => {
+        const headers: Record<string, string> = { ...(options.headers as Record<string, string>) };
         if (token) headers.Authorization = `Bearer ${token}`;
         headers['X-City'] = city;
 
@@ -106,7 +121,6 @@ export function AppProvider({ children }) {
         if (!navigator.geolocation) return;
         navigator.geolocation.getCurrentPosition((pos) => {
             const { latitude } = pos.coords;
-            // Rough: Mumbai ~18-20, Delhi ~28-29
             if (latitude >= 27 && latitude <= 30) setCity('delhi');
             else if (latitude >= 18 && latitude <= 21) setCity('mumbai');
         }, () => { });
