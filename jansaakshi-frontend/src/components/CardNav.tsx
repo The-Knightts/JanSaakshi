@@ -6,6 +6,7 @@ import { GoArrowUpRight } from "react-icons/go";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import "./CardNav.css";
+import { useRouter } from "next/navigation";
 
 interface CardNavLink {
     label: string;
@@ -49,6 +50,7 @@ const CardNav = ({
     const cardsRef = useRef<(HTMLDivElement | null)[]>([]);
     const tlRef = useRef<gsap.core.Timeline | null>(null);
     const pathname = usePathname();
+    const router = useRouter();
 
     // Close menu on route change
     useEffect(() => {
@@ -213,6 +215,7 @@ const CardNav = ({
                             backgroundColor: buttonBgColor,
                             color: buttonTextColor,
                         }}
+                        onClick={() => router.push("/profile")}
                     >
                         Get Started
                     </button>

@@ -267,11 +267,12 @@ export default function WardMap() {
     return (
         <div style={{ width: '100%', height: '100%' }}>
             <MapContainer
-                whenReady={(e) => {
-                    mapRef.current = e.target;
-                    setTimeout(() => {
-                        e.target.invalidateSize();
-                    }, 600);
+                whenReady={() => {
+                    if (mapRef.current) {
+                        setTimeout(() => {
+                            mapRef.current.invalidateSize();
+                        }, 0);
+                    }
                 }}
                 style={{ width: '100%', height: '100%' }}
                 zoom={10}
