@@ -1,8 +1,8 @@
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'primary' | 'outline';
-    size?: 'sm' | 'md' | 'lg';
+    variant?: 'primary' | 'outline' | 'ghost';
+    size?: 'sm' | 'md' | 'lg' | 'icon';
     className?: string;
     children: React.ReactNode;
 }
@@ -13,12 +13,14 @@ export function Button({ variant = 'primary', size = 'md', className = '', child
     const variants = {
         primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-md',
         outline: 'border border-slate-200 bg-transparent hover:bg-slate-100 text-slate-900',
+        ghost: 'hover:bg-slate-100 text-slate-700',
     };
 
     const sizes = {
         sm: 'h-9 px-3 text-sm rounded-md',
         md: 'h-11 px-4 py-2 rounded-lg',
         lg: 'h-14 px-8 text-lg rounded-xl',
+        icon: 'h-10 w-10 flex-shrink-0 rounded-full',
     };
 
     return (

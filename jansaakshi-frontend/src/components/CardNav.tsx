@@ -61,7 +61,7 @@ const CardNav = ({
 
     const calculateHeight = () => {
         const navEl = navRef.current;
-        if (!navEl) return 110;
+        if (!navEl) return 180;
 
         const isMobile = window.matchMedia("(max-width: 768px)").matches;
         if (isMobile) {
@@ -79,7 +79,7 @@ const CardNav = ({
 
                 contentEl.offsetHeight; // force reflow
 
-                const topBar = 52;
+                const topBar = 60;
                 const padding = 16;
                 const contentHeight = contentEl.scrollHeight;
 
@@ -91,14 +91,14 @@ const CardNav = ({
                 return topBar + contentHeight + padding;
             }
         }
-        return 110;
+        return 180;
     };
 
     const createTimeline = () => {
         const navEl = navRef.current;
         if (!navEl) return null;
 
-        gsap.set(navEl, { height: 52, overflow: "hidden" });
+        gsap.set(navEl, { height: 60, overflow: "hidden" });
         gsap.set(cardsRef.current, { y: 50, opacity: 0 });
 
         const tl = gsap.timeline({ paused: true });
@@ -206,24 +206,16 @@ const CardNav = ({
                         )}
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <button
-                            type="button"
-                            className="card-nav-cta-button"
-                            style={{
-                                backgroundColor: buttonBgColor,
-                                color: buttonTextColor,
-                            }}
-                        >
-                            GET STARTED
-                        </button>
-                        <div className="h-10 w-10 rounded-full bg-slate-100 border border-slate-200 hidden md:flex items-center justify-center overflow-hidden">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" className="h-5 w-5">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                            </svg>
-                        </div>
-                    </div>
+                    <button
+                        type="button"
+                        className="card-nav-cta-button"
+                        style={{
+                            backgroundColor: buttonBgColor,
+                            color: buttonTextColor,
+                        }}
+                    >
+                        Get Started
+                    </button>
                 </div>
 
                 <div className="card-nav-content" aria-hidden={!isExpanded}>
