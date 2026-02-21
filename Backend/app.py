@@ -327,7 +327,9 @@ def api_projects():
 @app.route("/api/projects/delayed")
 def api_delayed():
     cid = resolve_city_id()
-    projects = search_projects(city_id=cid, status="delayed")
+    delayed = search_projects(city_id=cid, status="delayed")
+    slightly = search_projects(city_id=cid, status="slightly delayed")
+    projects = delayed + slightly
     projects.sort(key=lambda x: x.get("delay_days", 0), reverse=True)
     return jsonify(projects)
 

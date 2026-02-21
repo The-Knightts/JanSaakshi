@@ -276,7 +276,7 @@ export default function HomePage() {
                         {p.summary && <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '3px' }}>{p.summary}</p>}
                         <div className="project-meta">
                           Ward {p.ward_no} – {p.ward_name}{p.ward_zone ? ` (${p.ward_zone})` : ''}
-                          {p.budget ? ` · ₹${(p.budget / 100000).toFixed(1)}L` : ''}
+                          {p.budget ? ` · ${p.budget >= 10000000 ? `₹${(p.budget / 10000000).toFixed(1)}Cr` : `₹${(p.budget / 100000).toFixed(1)}L`}` : ''}
                           {p.contractor_name ? ` · ${p.contractor_name}` : ''}
                         </div>
                       </div>

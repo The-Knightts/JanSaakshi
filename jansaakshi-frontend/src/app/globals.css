@@ -613,7 +613,15 @@ body {
   color: var(--red);
 }
 
-.status-ongoing {
+.status-slightly-delayed,
+.status-slightly\ delayed {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.status-ongoing,
+.status-in-progress,
+.status-in\ progress {
   background: var(--amber-bg);
   color: var(--amber);
 }
@@ -621,6 +629,17 @@ body {
 .status-completed {
   background: var(--green-bg);
   color: var(--green);
+}
+
+.status-completed-delayed,
+.status-completed\ \(delayed\) {
+  background: #fefce8;
+  color: #a16207;
+}
+
+.status-upcoming {
+  background: #f0f9ff;
+  color: #0284c7;
 }
 
 .status-approved,

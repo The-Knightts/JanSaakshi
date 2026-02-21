@@ -7,20 +7,32 @@ import { useSearchParams, useRouter } from 'next/navigation';
 /* ─── Status config ─── */
 const STATUS_CFG: Record<string, { bg: string; text: string; dot: string; glow: string }> = {
     completed: { bg: '#f0fdf4', text: '#16a34a', dot: '#16a34a', glow: 'rgba(22,163,74,0.15)' },
+    'completed (delayed)': { bg: '#fefce8', text: '#a16207', dot: '#eab308', glow: 'rgba(234,179,8,0.15)' },
     ongoing: { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6', glow: 'rgba(59,130,246,0.15)' },
+    'in progress': { bg: '#eff6ff', text: '#1d4ed8', dot: '#3b82f6', glow: 'rgba(59,130,246,0.15)' },
     delayed: { bg: '#fef2f2', text: '#dc2626', dot: '#ef4444', glow: 'rgba(239,68,68,0.15)' },
+    'slightly delayed': { bg: '#fff7ed', text: '#ea580c', dot: '#f97316', glow: 'rgba(249,115,22,0.15)' },
     stalled: { bg: '#fffbeb', text: '#d97706', dot: '#f59e0b', glow: 'rgba(245,158,11,0.15)' },
     approved: { bg: '#f5f3ff', text: '#7c3aed', dot: '#8b5cf6', glow: 'rgba(139,92,246,0.15)' },
+    upcoming: { bg: '#f0f9ff', text: '#0284c7', dot: '#38bdf8', glow: 'rgba(56,189,248,0.15)' },
     pending: { bg: '#f8fafc', text: '#64748b', dot: '#94a3b8', glow: 'rgba(148,163,184,0.1)' },
 };
 const cfg = (s: string) => STATUS_CFG[s?.toLowerCase()] ?? STATUS_CFG.pending;
+
+/* ─── Budget formatter ─── */
+const fmtBudget = (budget: number) => {
+    if (!budget || budget <= 0) return null;
+    if (budget >= 10000000) return `₹${(budget / 10000000).toFixed(1)}Cr`;
+    if (budget >= 100000) return `₹${(budget / 100000).toFixed(1)}L`;
+    return `₹${budget.toLocaleString('en-IN')}`;
+};
 
 const TYPE_ICONS: Record<string, string> = {
     roads: '🛣️', water_supply: '💧', drainage: '🌊', parks: '🌳',
     schools: '🏫', healthcare: '🏥', street_lighting: '💡', waste_management: '♻️',
 };
 
-const STATUS_TABS = ['all', 'ongoing', 'delayed', 'completed', 'stalled', 'approved'];
+const STATUS_TABS = ['all', 'ongoing', 'delayed', 'slightly delayed', 'completed', 'upcoming', 'stalled', 'approved'];
 
 /* ─── Shimmer skeleton ─── */
 function Skeleton() {
@@ -49,7 +61,11 @@ function Skeleton() {
 }
 
 /* ─── Expandable Project Row ─── */
-function ProjectRow({ p, index }: { p: any; index: number }) {
+function ProjectRow({ p, index, user, apiFetch, followedIds, onToggleFollow }: {
+    p: any; index: number; user: any;
+    apiFetch: (url: string, opts?: RequestInit) => Promise<Response>;
+    followedIds: Set<number>; onToggleFollow: (id: number) => void;
+}) {
     const [open, setOpen] = useState(false);
     const s = cfg(p.status);
 
@@ -107,9 +123,19 @@ function ProjectRow({ p, index }: { p: any; index: number }) {
                         <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: '#eff6ff', color: '#1d4ed8', fontWeight: 500 }}>
                             Ward {p.ward_no}{p.ward_name ? ` · ${p.ward_name}` : ''}
                         </span>
-                        {p.budget > 0 && (
+                        {fmtBudget(p.budget) && (
                             <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: '#f0fdf4', color: '#16a34a', fontWeight: 500 }}>
-                                ₹{(p.budget / 100000).toFixed(1)}L
+                                {fmtBudget(p.budget)}
+                            </span>
+                        )}
+                        {p.start_date && (
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: '#faf5ff', color: '#7c3aed', fontWeight: 500 }}>
+                                📅 {p.start_date}
+                            </span>
+                        )}
+                        {p.expected_completion && (
+                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', background: '#fff7ed', color: '#ea580c', fontWeight: 500 }}>
+                                🏁 {p.expected_completion}
                             </span>
                         )}
                         {p.contractor_name && (
@@ -154,7 +180,10 @@ function ProjectRow({ p, index }: { p: any; index: number }) {
                         { label: 'Ward', value: `${p.ward_no}${p.ward_name ? ' – ' + p.ward_name : ''}` },
                         { label: 'Zone', value: p.ward_zone || '—' },
                         { label: 'Type', value: p.project_type ? (TYPE_ICONS[p.project_type] || '') + ' ' + p.project_type.replace(/_/g, ' ') : '—' },
-                        { label: 'Budget', value: p.budget > 0 ? `₹${(p.budget / 100000).toFixed(2)}L` : '—' },
+                        { label: 'Budget', value: fmtBudget(p.budget) || '—' },
+                        { label: 'Start Date', value: p.start_date || '—' },
+                        { label: 'Expected Completion', value: p.expected_completion || '—' },
+                        { label: 'Corporator', value: p.corporator_name || '—' },
                         { label: 'Contractor', value: p.contractor_name || '—' },
                         { label: 'Delay', value: p.delay_days > 0 ? `${p.delay_days} days` : 'On schedule' },
                     ].map(({ label, value }) => (
@@ -169,6 +198,42 @@ function ProjectRow({ p, index }: { p: any; index: number }) {
                             <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{p.summary}</div>
                         </div>
                     )}
+                    {/* Follow Up button */}
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                        {user ? (
+                            <button
+                                onClick={(e) => { e.stopPropagation(); onToggleFollow(p.id); }}
+                                style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    padding: '8px 18px', borderRadius: '8px',
+                                    border: followedIds.has(p.id) ? '1.5px solid #16a34a' : '1.5px solid #1d4ed8',
+                                    background: followedIds.has(p.id) ? '#f0fdf4' : '#eff6ff',
+                                    color: followedIds.has(p.id) ? '#16a34a' : '#1d4ed8',
+                                    fontWeight: 600, fontSize: '12px', cursor: 'pointer',
+                                    transition: 'all 0.2s ease',
+                                }}
+                                onMouseEnter={e => {
+                                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1.03)';
+                                    (e.currentTarget as HTMLButtonElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+                                }}
+                                onMouseLeave={e => {
+                                    (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+                                    (e.currentTarget as HTMLButtonElement).style.boxShadow = 'none';
+                                }}
+                            >
+                                {followedIds.has(p.id) ? '🔔 Following' : '🔕 Follow Up'}
+                            </button>
+                        ) : (
+                            <span style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                padding: '8px 18px', borderRadius: '8px',
+                                background: '#f8fafc', color: '#94a3b8',
+                                fontSize: '12px', border: '1px solid #e2e8f0',
+                            }}>
+                                🔒 Log in to follow
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
         </div>
@@ -177,7 +242,7 @@ function ProjectRow({ p, index }: { p: any; index: number }) {
 
 /* ─── Main component ─── */
 function ProjectsList() {
-    const { apiFetch } = useApp();
+    const { apiFetch, user } = useApp();
     const searchParams = useSearchParams();
     const router = useRouter();
 
@@ -188,6 +253,39 @@ function ProjectsList() {
     const [wardFilter, setWardFilter] = useState(searchParams.get('ward') || '');
     const [q, setQ] = useState(searchParams.get('q') || '');
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const [followedIds, setFollowedIds] = useState<Set<number>>(new Set());
+
+    /* Load followed projects for this user */
+    useEffect(() => {
+        if (!user) return;
+        apiFetch('/api/following')
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+                if (d?.projects) setFollowedIds(new Set(d.projects.map((p: any) => p.id)));
+            })
+            .catch(() => { });
+    }, [user, apiFetch]);
+
+    const toggleFollow = async (projectId: number) => {
+        if (!user) return;
+        const isFollowed = followedIds.has(projectId);
+        const endpoint = isFollowed ? '/api/unfollow' : '/api/follow';
+        try {
+            const res = await apiFetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_id: projectId }),
+            });
+            if (res.ok) {
+                setFollowedIds(prev => {
+                    const next = new Set(prev);
+                    if (isFollowed) next.delete(projectId);
+                    else next.add(projectId);
+                    return next;
+                });
+            }
+        } catch { }
+    };
 
     const load = useCallback(async (overrideQ?: string) => {
         setLoading(true);
@@ -223,8 +321,8 @@ function ProjectsList() {
 
     /* Mini stats */
     const total = projects.length;
-    const delayed = projects.filter(p => p.status?.toLowerCase() === 'delayed').length;
-    const completed = projects.filter(p => p.status?.toLowerCase() === 'completed').length;
+    const delayed = projects.filter(p => ['delayed', 'slightly delayed'].includes(p.status?.toLowerCase())).length;
+    const completed = projects.filter(p => ['completed', 'completed (delayed)'].includes(p.status?.toLowerCase())).length;
     const totalBudget = projects.reduce((s, p) => s + (Number(p.budget) || 0), 0);
     const budgetLabel = totalBudget >= 10000000
         ? `₹${(totalBudget / 10000000).toFixed(1)}Cr`
@@ -350,7 +448,7 @@ function ProjectsList() {
                         <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Try changing your filters or search term</p>
                     </div>
                 ) : (
-                    projects.map((p, i) => <ProjectRow key={i} p={p} index={i} />)
+                    projects.map((p, i) => <ProjectRow key={i} p={p} index={i} user={user} apiFetch={apiFetch} followedIds={followedIds} onToggleFollow={toggleFollow} />)
                 )}
             </div>
 

@@ -370,9 +370,9 @@ def get_statistics(city_id=None):
 
     stats = {}
     stats["total_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{w}", p).fetchone()[0]
-    stats["delayed_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{w}{a} status='delayed'", p).fetchone()[0]
+    stats["delayed_projects"] = conn.execute(f"SELECT COUNT(*) FROM projects{w}{a} status IN ('delayed', 'slightly delayed')", p).fetchone()[0]
     stats["total_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget),0) FROM projects{w}", p).fetchone()[0]
-    stats["delayed_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget),0) FROM projects{w}{a} status='delayed'", p).fetchone()[0]
+    stats["delayed_budget"] = conn.execute(f"SELECT COALESCE(SUM(budget),0) FROM projects{w}{a} status IN ('delayed', 'slightly delayed')", p).fetchone()[0]
     stats["total_wards"] = conn.execute(f"SELECT COUNT(DISTINCT ward_no) FROM projects{w}", p).fetchone()[0]
     conn.close()
     return stats

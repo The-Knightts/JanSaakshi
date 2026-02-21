@@ -78,7 +78,7 @@ export default function SearchPage() {
                                         <div key={i} className="project-item">
                                             <div>
                                                 <div className="project-name">{p.project_name}</div>
-                                                <div className="project-meta">Ward {p.ward_no} – {p.ward_name}{p.budget ? ` · ₹${(p.budget / 100000).toFixed(1)}L` : ''}{p.ward_zone ? ` (${p.ward_zone})` : ''}</div>
+                                                <div className="project-meta">Ward {p.ward_no} – {p.ward_name}{p.budget ? ` · ${p.budget >= 10000000 ? `₹${(p.budget / 10000000).toFixed(1)}Cr` : `₹${(p.budget / 100000).toFixed(1)}L`}` : ''}{p.ward_zone ? ` (${p.ward_zone})` : ''}</div>
                                             </div>
                                             <div style={{ textAlign: 'right', flexShrink: 0 }}>
                                                 <span className={`status-badge status-${p.status}`}>{p.status}</span>

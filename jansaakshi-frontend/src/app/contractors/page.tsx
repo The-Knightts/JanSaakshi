@@ -130,8 +130,12 @@ function ProgressBar({ segments }: {
 function StatusBadge({ status }: { status: string }) {
     const map: Record<string, { bg: string; color: string }> = {
         completed: { bg: '#f0fdf4', color: '#16a34a' },
+        'completed (delayed)': { bg: '#fefce8', color: '#a16207' },
         delayed: { bg: '#fef2f2', color: '#dc2626' },
+        'slightly delayed': { bg: '#fff7ed', color: '#ea580c' },
         'in progress': { bg: '#fffbeb', color: '#d97706' },
+        ongoing: { bg: '#eff6ff', color: '#2563eb' },
+        upcoming: { bg: '#f0f9ff', color: '#0284c7' },
         stalled: { bg: '#f5f3ff', color: '#7c3aed' },
     };
     const s = map[(status || '').toLowerCase()] || { bg: '#eff6ff', color: '#2563eb' };
@@ -501,7 +505,7 @@ function ProjectPanel({ contractorName, apiFetch }: {
                             <div style={{ fontSize: 11, color: '#94a3b8', display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                                 <span>Ward {p.ward_no}{p.ward_name ? ` · ${p.ward_name}` : ''}</span>
                                 {p.project_type && <span>· {p.project_type}</span>}
-                                {p.budget > 0 && <span>· ₹{(p.budget / 100000).toFixed(1)}L</span>}
+                                {p.budget > 0 && <span>· {p.budget >= 10000000 ? `₹${(p.budget / 10000000).toFixed(1)}Cr` : `₹${(p.budget / 100000).toFixed(1)}L`}</span>}
                                 {p.location_details && <span>· {p.location_details}</span>}
                             </div>
                             {(p.start_date || p.expected_completion) && (
